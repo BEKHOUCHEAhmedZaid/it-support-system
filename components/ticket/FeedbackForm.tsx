@@ -1,17 +1,18 @@
 'use client'
+
 import { useState } from 'react'
 import { submitFeedback } from '@/lib/actions/tickets'
 
 interface Props {
   ticketId: string
-  existingFeedback: { rating: number; comment: string | null } | null
+  existingFeedback?: { rating: number; comment: string | null } | null
 }
 
 export function FeedbackForm({ ticketId, existingFeedback }: Props) {
-  const [rating,  setRating]  = useState(existingFeedback?.rating ?? 0)
+  const [rating, setRating] = useState(existingFeedback?.rating ?? 0)
   const [comment, setComment] = useState(existingFeedback?.comment ?? '')
   const [submitting, setSubmitting] = useState(false)
-  const [done, setDone]   = useState(!!existingFeedback)
+  const [done, setDone] = useState(!!existingFeedback)
   const [error, setError] = useState<string | null>(null)
 
   if (done) {
@@ -20,20 +21,30 @@ export function FeedbackForm({ ticketId, existingFeedback }: Props) {
         <h3 className="text-lg font-bold mb-2">Merci pour votre retour !</h3>
         <div className="flex gap-1 mb-3 text-2xl">
           {[1, 2, 3, 4, 5].map(star => (
-            <span key={star} className={star <= rating ? 'text-white' : 'text-white/30'}>★</span>
+            <span key={star} className={star <= rating ? 'text-white' : 'text-white/30'}>
+              ★
+            </span>
           ))}
         </div>
-        {comment && <p className="text-sm text-blue-50 leading-relaxed italic">&quot;{comment}&quot;</p>}
+        {comment && <p className="text-sm text-blue-50 leading-relaxed italic">"{comment}"</p>}
       </div>
     )
   }
 
   const handleSubmit = async () => {
-    if (rating === 0) { setError('Veuillez sélectionner une note.'); return }
+    if (rating === 0) {
+      setError('Veuillez sélectionner une note.')
+      return
+    }
     setSubmitting(true)
+    setError(null)
     const result = await submitFeedback(ticketId, rating, comment)
-    if (result?.error) { setError(result.error); setSubmitting(false); return }
-    setDone(true)
+    if (result?.error) {
+      setError(result.error)
+      setSubmitting(false)
+    } else {
+      setDone(true)
+    }
   }
 
   return (
@@ -42,7 +53,7 @@ export function FeedbackForm({ ticketId, existingFeedback }: Props) {
       <p className="text-sm text-blue-100 mb-6">Comment évaluez-vous la résolution de ce ticket ?</p>
 
       <div className="space-y-5">
-        {/* Star rating */}
+        {/* Sélection de la note */}
         <div className="flex gap-2">
           {[1, 2, 3, 4, 5].map(star => (
             <button
@@ -57,6 +68,7 @@ export function FeedbackForm({ ticketId, existingFeedback }: Props) {
           ))}
         </div>
 
+        {/* Commentaire */}
         <div className="relative">
           <textarea
             value={comment}
@@ -69,12 +81,13 @@ export function FeedbackForm({ ticketId, existingFeedback }: Props) {
 
         {error && <p className="text-xs text-red-200 bg-red-500/20 rounded-lg px-3 py-2">{error}</p>}
 
-        <button 
-          onClick={handleSubmit} 
+        {/* Bouton d'envoi */}
+        <button
+          onClick={handleSubmit}
           disabled={submitting}
           className="w-full rounded-xl bg-white px-6 py-4 text-sm font-black text-primary shadow-lg hover:bg-blue-50 hover:-translate-y-0.5 active:translate-y-0 transition-all"
         >
-          {submitting ? 'Envoi...' : 'Envoyer l\'évaluation'}
+          {submitting ? 'Envoi...' : "Envoyer l'évaluation"}
         </button>
       </div>
     </div>
