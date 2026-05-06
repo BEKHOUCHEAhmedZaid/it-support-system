@@ -127,7 +127,7 @@ export default async function EmployeeTicketDetailPage({
 
           {/* Feedback Form */}
           {t.status === 'resolved' && !feedbackData && (
-            <FeedbackForm ticketId={id} />
+           <FeedbackForm ticketId={id} existingFeedback={null} />
           )}
 
           {/* Technician Info */}
