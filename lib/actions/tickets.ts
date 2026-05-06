@@ -14,7 +14,9 @@ export async function createTicket(formData: FormData) {
   const category       = formData.get('category') as string
   const priority       = formData.get('priority') as string
   const screenshot_url = formData.get('screenshot_url') as string | null
-  const system_info    = JSON.parse(formData.get('system_info') as string || '{}')
+  const system_info    = formData.get('system_info') as string || ''
+
+  console.log("Creating ticket for user:", user.id);
 
   const { data, error } = await supabase.from('tickets').insert({
     employee_id: user.id,
@@ -22,11 +24,17 @@ export async function createTicket(formData: FormData) {
     description,
     category,
     priority,
+    status: 'open',
     screenshot_url,
     system_info,
   }).select().single()
 
-  if (error) return { error: error.message }
+  if (error) {
+    console.error("Supabase Error:", error);
+    return { error: error.message }
+  }
+
+  console.log("Ticket created successfully:", data);
 
   revalidatePath('/client/tickets')
   revalidatePath('/admin/tickets')

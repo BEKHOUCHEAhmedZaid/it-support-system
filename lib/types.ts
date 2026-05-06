@@ -10,7 +10,7 @@ export type Profile = {
   status?: ProfileStatus // mainly for technicians
 }
 
-export type TicketStatus  = 'new' | 'in_progress' | 'resolved'
+export type TicketStatus  = 'open' | 'new' | 'in_progress' | 'resolved'
 export type TicketPriority = 'bloquant' | 'haute' | 'normale'
 export type TicketCategory = 'Réseau' | 'Logiciel' | 'Matériel' | 'Autre'
 

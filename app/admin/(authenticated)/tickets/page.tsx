@@ -25,7 +25,7 @@ export default async function AdminGlobalTicketsPage() {
 
   const allTickets = (tickets ?? []) as Ticket[]
   const stats = {
-    new: allTickets.filter(t => t.status === 'new').length,
+    open: allTickets.filter(t => t.status === 'open' || t.status === 'new').length,
     inProgress: allTickets.filter(t => t.status === 'in_progress').length,
     resolved: allTickets.filter(t => t.status === 'resolved').length,
   }
@@ -41,7 +41,7 @@ export default async function AdminGlobalTicketsPage() {
         
         <div className="grid grid-cols-3 gap-3">
           {[
-            { label: 'Nouveaux', value: stats.new, color: 'text-amber-600', bg: 'bg-amber-50' },
+            { label: 'Ouverts', value: stats.open, color: 'text-amber-600', bg: 'bg-amber-50' },
             { label: 'En cours', value: stats.inProgress, color: 'text-primary', bg: 'bg-blue-50' },
             { label: 'Résolus', value: stats.resolved, color: 'text-emerald-600', bg: 'bg-emerald-50' },
           ].map(s => (

@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS public.tickets (
   description     text        NOT NULL,
   category        text        NOT NULL CHECK (category IN ('Réseau','Logiciel','Matériel','Autre')),
   priority        text        NOT NULL CHECK (priority IN ('bloquant','haute','normale')),
-  status          text        NOT NULL DEFAULT 'new' CHECK (status IN ('new','in_progress','resolved')),
+  status          text        NOT NULL DEFAULT 'open' CHECK (status IN ('open','new','in_progress','resolved')),
   system_info     text,
   screenshot_url  text,
   created_at      timestamptz DEFAULT now(),
@@ -119,16 +119,12 @@ CREATE POLICY "tickets_select_all"
     )
   );
 
--- INSERT POLICY: Only clients can create tickets
-CREATE POLICY "tickets_insert_client"
+-- INSERT POLICY: Clients can insert tickets
+CREATE POLICY "Clients can insert tickets"
   ON public.tickets FOR INSERT
   TO authenticated
   WITH CHECK (
     auth.uid() = employee_id
-    AND EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND role IN ('client', 'employee', 'admin')
-    )
   );
 
 -- UPDATE POLICY: Technicians can update if unassigned OR assigned to them. Admin always.

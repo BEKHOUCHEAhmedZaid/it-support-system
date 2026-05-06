@@ -23,7 +23,7 @@ export default async function TechnicianTicketsPage({
   let query = supabase
     .from('tickets')
     .select('*, employee:employee_id(id,full_name,role,avatar_url), technician:technician_id(id,full_name,role,avatar_url)')
-    .or(`technician_id.eq.${user.id},status.eq.new`)
+    .or(`technician_id.eq.${user.id},status.eq.open`)
     .order('created_at', { ascending: false })
 
   if (params.search) {

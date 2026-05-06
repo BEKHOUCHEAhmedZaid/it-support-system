@@ -31,7 +31,7 @@ export function NewTicketForm({ userId }: { userId: string }) {
     try {
       const info = collectSystemInfo()
       // Format as readable text instead of raw JSON
-      const text = `OS: ${info.os}\nNavigateur: ${info.browser}\nÉcran: ${info.screen}\nLangue: ${info.language}`
+      const text = `OS: ${info.platform}\nNavigateur: ${info.userAgent}\nÉcran: ${info.screenWidth}x${info.screenHeight}\nLangue: ${info.language}`
       setSystemInfo(text)
     } catch {}
   }, [])

@@ -68,11 +68,8 @@ export function Sidebar({ role, userName, userAvatar }: Props) {
     <aside className="hidden md:flex flex-col w-60 min-h-screen bg-sidebar text-white shadow-2xl">
       {/* Brand */}
       <div className="p-6 pb-4">
-        <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="w-8 h-8 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-all">
-            <Image src="/logo.png" alt="IT-Fix" width={22} height={22} className="brightness-0 invert" />
-          </div>
-          <span className="text-lg font-black text-white/90 tracking-tight">IT‑Fix</span>
+        <Link href="/" className="flex items-center group mb-6">
+          <img src="/logo.png" alt="IT-Fix Logo" className="h-12 md:h-16 w-auto object-contain group-hover:scale-105 transition-transform duration-300" />
         </Link>
         <p className="text-[10px] text-slate-400 mt-4 font-black uppercase tracking-[0.2em] opacity-60">
           {role === 'admin' ? 'Système' : role === 'technician' ? 'Support' : 'Interface'}

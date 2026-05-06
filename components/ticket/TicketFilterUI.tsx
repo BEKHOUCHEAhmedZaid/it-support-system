@@ -47,7 +47,7 @@ export function TicketFilterUI() {
       <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-2xl border border-gray-100">
         {[
           { label: 'Tous', value: '' },
-          { label: 'Nouveaux', value: 'new' },
+          { label: 'Ouverts', value: 'open' },
           { label: 'En cours', value: 'in_progress' },
           { label: 'Résolus', value: 'resolved' },
         ].map((s) => (
