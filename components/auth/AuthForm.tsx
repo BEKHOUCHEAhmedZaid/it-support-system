@@ -240,7 +240,7 @@ export function AuthForm({ role }: { role: Role }) {
               </button>
               <button
                 type="button"
-                onClick={() => handleDemoLogin('bekhoucheahmedziad@gamil.com', '12345678', 'admin')}
+                onClick={() => handleDemoLogin('bekhoucheahmedziad@gmail.com', '12345678', 'admin')}
                 disabled={loading}
                 className="w-full rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-purple-50 hover:border-purple-200 hover:text-purple-700 transition-all text-left flex justify-between items-center group shadow-sm"
               >
