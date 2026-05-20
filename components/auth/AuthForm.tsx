@@ -56,7 +56,7 @@ export function AuthForm({ role }: { role: Role }) {
   }
 
   const handleDemoLogin = async (email: string, pass: string, demoRole: Role) => {
-    // 1. Visually fill in the fields as requested
+    // 1. Visually fill in the fields
     const emailInput = document.getElementById('email') as HTMLInputElement
     const passInput = document.getElementById('password') as HTMLInputElement
     if (emailInput) emailInput.value = email
@@ -65,11 +65,37 @@ export function AuthForm({ role }: { role: Role }) {
     setLoading(true)
     setError(null)
     setSuccess(null)
+    
     const fd = new FormData()
     fd.append('email', email)
     fd.append('password', pass)
     
-    const result = await signIn(fd, demoRole)
+    // First, try to log in normally
+    let result = await signIn(fd, demoRole)
+    
+    // If login fails (which causes the 400 Bad Request if user doesn't exist), auto-create the demo account
+    if (result?.error) {
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
+      
+      // Auto-create the user to fix the 400 error silently
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password: pass,
+        options: {
+          data: {
+            full_name: `Demo ${demoRole}`,
+            role: demoRole,
+            status: 'approved'
+          }
+        }
+      })
+      
+      if (!signUpError && signUpData.user) {
+        // Now that the account is created, retry the login to ensure proper role checks
+        result = await signIn(fd, demoRole)
+      }
+    }
     
     if (result?.error) {
       setError(result.error)
