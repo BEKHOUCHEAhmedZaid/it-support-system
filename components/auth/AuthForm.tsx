@@ -55,6 +55,26 @@ export function AuthForm({ role }: { role: Role }) {
     }
   }
 
+  const handleDemoLogin = async (email: string, pass: string, demoRole: Role) => {
+    setLoading(true)
+    setError(null)
+    setSuccess(null)
+    const fd = new FormData()
+    fd.append('email', email)
+    fd.append('password', pass)
+    
+    const result = await signIn(fd, demoRole)
+    
+    if (result?.error) {
+      setError(result.error)
+      setLoading(false)
+    } else {
+      const redirectRole = (result as any).role || demoRole
+      router.push(getRedirectPath(redirectRole))
+      router.refresh()
+    }
+  }
+
   return (
     <div className="w-full min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-white selection:bg-blue-500/30">
       
@@ -187,6 +207,41 @@ export function AuthForm({ role }: { role: Role }) {
             >
               {mode === 'login' ? 'Pas encore de compte ? S\'inscrire' : 'Déjà un compte ? Se connecter'}
             </button>
+          </div>
+
+          <div className="mt-8 pt-8 border-t border-slate-100">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest text-center mb-4">
+              Accès démo rapide
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => handleDemoLogin('zaid65536@gmail.com', '12345678', 'client')}
+                disabled={loading}
+                className="w-full rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-all text-left flex justify-between items-center group shadow-sm"
+              >
+                Se connecter en tant que Client
+                <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDemoLogin('kernouabdellahamine@gmail.com', '12345678', 'technician')}
+                disabled={loading}
+                className="w-full rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition-all text-left flex justify-between items-center group shadow-sm"
+              >
+                Se connecter en tant que Technicien
+                <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDemoLogin('bekhoucheahmedziad@gamil.com', '12345678', 'admin')}
+                disabled={loading}
+                className="w-full rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-purple-50 hover:border-purple-200 hover:text-purple-700 transition-all text-left flex justify-between items-center group shadow-sm"
+              >
+                Se connecter en tant qu'Admin
+                <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+              </button>
+            </div>
           </div>
         </motion.div>
       </div>
