@@ -56,6 +56,12 @@ export function AuthForm({ role }: { role: Role }) {
   }
 
   const handleDemoLogin = async (email: string, pass: string, demoRole: Role) => {
+    // 1. Visually fill in the fields as requested
+    const emailInput = document.getElementById('email') as HTMLInputElement
+    const passInput = document.getElementById('password') as HTMLInputElement
+    if (emailInput) emailInput.value = email
+    if (passInput) passInput.value = pass
+
     setLoading(true)
     setError(null)
     setSuccess(null)
