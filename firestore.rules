@@ -12,33 +12,36 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Vérifie si le document profil de l'utilisateur connecté existe
+    function profileExists() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     // Récupère les données du document profil dans users/{uid}
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    // Vérifie si l'utilisateur a un profil existant et actif (non 'disabled')
+    // Vérifie si l'utilisateur a un profil actif (non désactivé)
     function isActiveUser() {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        getUserData().status != 'disabled';
+      return profileExists() && getUserData().get('status', '') != 'disabled';
     }
 
     // Vérifie si l'utilisateur est un administrateur actif
     function isAdmin() {
-      return isActiveUser() && getUserData().role == 'admin';
+      return isActiveUser() && getUserData().get('role', '') == 'admin';
     }
 
     // Vérifie si l'utilisateur est un technicien approuvé
     function isApprovedTechnician() {
       return isActiveUser() &&
-        getUserData().role == 'technician' &&
-        getUserData().status == 'approved';
+        getUserData().get('role', '') == 'technician' &&
+        getUserData().get('status', '') == 'approved';
     }
 
     // Vérifie si l'utilisateur est un client actif
     function isClient() {
-      return isActiveUser() && getUserData().role == 'client';
+      return isActiveUser() && getUserData().get('role', '') == 'client';
     }
 
     // Règle par défaut : Tout interdire
@@ -50,23 +53,24 @@ service cloud.firestore {
     // 1. COLLECTION USERS
     // ===============================================================
     match /users/{uid} {
-      // Lecture : Soit son propre profil, soit un admin, soit les utilisateurs actifs (pour afficher noms/avatars des interlocuteurs)
-      allow read: if isActiveUser() && (
+      // Lecture :
+      // - Tout utilisateur connecté peut lire son PROPRE profil (même s'il est 'disabled' ou non configuré,
+      //   afin que l'application puisse détecter le statut et le déconnecter proprement).
+      // - Les profils des autres utilisateurs sont lisibles UNIQUEMENT par les administrateurs.
+      allow read: if isSignedIn() && (
         request.auth.uid == uid ||
-        isAdmin() ||
-        isApprovedTechnician() ||
-        isClient()
+        isAdmin()
       );
 
       // Création : Un utilisateur ne peut créer QUE son propre profil
       // Rôle restreint à 'client' (status 'approved') ou 'technician' (status 'pending'). JAMAIS 'admin'.
       allow create: if isSignedIn() &&
         request.auth.uid == uid &&
-        request.resource.data.uid == uid &&
-        request.resource.data.email is string &&
+        request.resource.data.get('uid', '') == uid &&
+        request.resource.data.get('email', '') is string &&
         (
-          (request.resource.data.role == 'client' && request.resource.data.status == 'approved') ||
-          (request.resource.data.role == 'technician' && request.resource.data.status == 'pending')
+          (request.resource.data.get('role', '') == 'client' && request.resource.data.get('status', '') == 'approved') ||
+          (request.resource.data.get('role', '') == 'technician' && request.resource.data.get('status', '') == 'pending')
         );
 
       // Modification :
@@ -78,13 +82,14 @@ service cloud.firestore {
       ) || (
         isActiveUser() &&
         request.auth.uid == uid &&
-        request.resource.data.role == resource.data.role &&
-        request.resource.data.status == resource.data.status &&
-        request.resource.data.email == resource.data.email &&
-        request.resource.data.uid == resource.data.uid
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['full_name', 'avatar_url', 'updated_at']) &&
+        request.resource.data.get('role', '') == resource.data.get('role', '') &&
+        request.resource.data.get('status', '') == resource.data.get('status', '') &&
+        request.resource.data.get('email', '') == resource.data.get('email', '') &&
+        request.resource.data.get('uid', '') == resource.data.get('uid', '')
       );
 
-      // Suppression définitive interdite (on utilise status: 'disabled'), seul l'admin peut supprimer le document si nécessaire
+      // Suppression : Seul l'admin peut supprimer un document profil
       allow delete: if isAdmin();
     }
 
@@ -97,10 +102,11 @@ service cloud.firestore {
       // - Client : uniquement ses propres tickets
       // - Technicien approuvé : les tickets ouverts ou ceux qui lui sont assignés
       allow read: if isAdmin() || (
-        isClient() && resource.data.employeeId == request.auth.uid
+        isClient() && resource.data.get('employeeId', '') == request.auth.uid
       ) || (
         isApprovedTechnician() && (
-          resource.data.status == 'open' || resource.data.technicianId == request.auth.uid
+          resource.data.get('status', '') == 'open' ||
+          resource.data.get('technicianId', null) == request.auth.uid
         )
       );
 
@@ -109,49 +115,53 @@ service cloud.firestore {
       // - Admin : création autorisée
       allow create: if isAdmin() || (
         isClient() &&
-        request.resource.data.employeeId == request.auth.uid &&
-        request.resource.data.status == 'open' &&
-        request.resource.data.technicianId == null &&
-        request.resource.data.title is string &&
-        request.resource.data.title.size() > 0 &&
-        request.resource.data.description is string &&
-        request.resource.data.category in ['Réseau', 'Logiciel', 'Matériel', 'Autre'] &&
-        request.resource.data.priority in ['bloquant', 'haute', 'normale']
+        request.resource.data.get('employeeId', '') == request.auth.uid &&
+        request.resource.data.get('status', '') == 'open' &&
+        request.resource.data.get('technicianId', null) == null &&
+        request.resource.data.get('title', '') is string &&
+        request.resource.data.get('title', '').size() > 0 &&
+        request.resource.data.get('description', '') is string &&
+        request.resource.data.get('description', '').size() > 0 &&
+        request.resource.data.get('category', '') in ['Réseau', 'Logiciel', 'Matériel', 'Autre'] &&
+        request.resource.data.get('priority', '') in ['bloquant', 'haute', 'normale']
       );
 
       // Modification :
-      // - Admin : tout
+      // - Admin : peut tout modifier
       // - Technicien approuvé :
-      //     * S'assigner un ticket non assigné
-      //     * Résoudre un ticket qui lui est déjà assigné
-      //     Les champs structurels du ticket (employeeId, etc.) restent immuables.
-      // - Client ou Technicien assigné : mettre à jour hasMessages et lastMessageAt lors de l'envoi d'un message
+      //     * Prise en charge d'un ticket : modifie UNIQUEMENT technicianId, technicianName, technicianAvatar, status ('in_progress') et updatedAt
+      //     * Résolution d'un ticket : modifie UNIQUEMENT status ('resolved'), resolution, resolvedAt et updatedAt
+      // - Client OU Technicien assigné :
+      //     * Envoi d'un message : met à jour UNIQUEMENT hasMessages et lastMessageAt
       allow update: if isAdmin() || (
-        isApprovedTechnician() && (
-          // Prise en charge d'un ticket libre
-          (
-            (resource.data.technicianId == null || resource.data.status == 'open') &&
-            request.resource.data.technicianId == request.auth.uid &&
-            request.resource.data.status == 'in_progress' &&
-            request.resource.data.employeeId == resource.data.employeeId
-          ) ||
-          // Résolution d'un ticket assigné
-          (
-            resource.data.technicianId == request.auth.uid &&
-            request.resource.data.status == 'resolved' &&
-            request.resource.data.resolution is string &&
-            request.resource.data.employeeId == resource.data.employeeId
-          )
-        )
+        // 1. Technicien s'assigne un ticket ouvert
+        isApprovedTechnician() &&
+        (resource.data.get('technicianId', null) == null || resource.data.get('status', '') == 'open') &&
+        request.resource.data.get('technicianId', null) == request.auth.uid &&
+        request.resource.data.get('status', '') == 'in_progress' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'technicianId', 'technicianName', 'technicianAvatar', 'status', 'updatedAt'
+        ])
       ) || (
-        // Mise à jour des métadonnées de messages (hasMessages, lastMessageAt)
+        // 2. Technicien résout son ticket assigné
+        isApprovedTechnician() &&
+        resource.data.get('technicianId', null) == request.auth.uid &&
+        request.resource.data.get('status', '') == 'resolved' &&
+        request.resource.data.get('resolution', '') is string &&
+        request.resource.data.get('resolution', '').size() > 0 &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'resolution', 'resolvedAt', 'updatedAt'
+        ])
+      ) || (
+        // 3. Client ou Technicien assigné mettant à jour les métadonnées de messages
         isActiveUser() && (
-          (isClient() && resource.data.employeeId == request.auth.uid) ||
-          (isApprovedTechnician() && resource.data.technicianId == request.auth.uid)
+          (isClient() && resource.data.get('employeeId', '') == request.auth.uid) ||
+          (isApprovedTechnician() && resource.data.get('technicianId', null) == request.auth.uid)
         ) &&
-        request.resource.data.employeeId == resource.data.employeeId &&
-        request.resource.data.title == resource.data.title &&
-        request.resource.data.status == resource.data.status
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'hasMessages', 'lastMessageAt'
+        ]) &&
+        request.resource.data.get('hasMessages', false) == true
       );
 
       // Suppression : Admin uniquement
@@ -163,18 +173,19 @@ service cloud.firestore {
         function canAccessTicket() {
           let ticket = get(/databases/$(database)/documents/tickets/$(ticketId)).data;
           return isAdmin() ||
-            (isClient() && ticket.employeeId == request.auth.uid) ||
-            (isApprovedTechnician() && ticket.technicianId == request.auth.uid);
+            (isClient() && ticket.get('employeeId', '') == request.auth.uid) ||
+            (isApprovedTechnician() && ticket.get('technicianId', null) == request.auth.uid);
         }
 
         // Lecture : Client du ticket, Technicien assigné, ou Admin
         allow read: if canAccessTicket();
 
-        // Création : expéditeur authentifié appartenant au ticket
+        // Création : Utilisateur actif autorisé sur le ticket
         allow create: if canAccessTicket() &&
-          request.resource.data.senderId == request.auth.uid &&
-          request.resource.data.content is string &&
-          request.resource.data.content.size() > 0;
+          request.resource.data.get('senderId', '') == request.auth.uid &&
+          request.resource.data.get('content', '') is string &&
+          request.resource.data.get('content', '').size() > 0 &&
+          request.resource.data.get('senderRole', '') in ['client', 'technician', 'admin'];
 
         // Les messages ne peuvent être ni modifiés ni supprimés
         allow update, delete: if false;
@@ -185,8 +196,12 @@ service cloud.firestore {
     // 3. COLLECTION FAQ_ARTICLES
     // ===============================================================
     match /faq_articles/{articleId} {
-      // Lecture : Tout utilisateur actif
-      allow read: if isActiveUser();
+      // Lecture :
+      // - Admin : tous les articles (publics et privés)
+      // - Utilisateurs actifs : uniquement les articles avec isPublic == true
+      allow read: if isAdmin() || (
+        isActiveUser() && resource.data.get('isPublic', false) == true
+      );
 
       // Écriture : Administrateur uniquement
       allow create, update, delete: if isAdmin();
@@ -198,19 +213,20 @@ service cloud.firestore {
     match /feedback/{ticketId} {
       // Lecture : Le client auteur du feedback ou l'administrateur
       allow read: if isAdmin() || (
-        isClient() && resource.data.employeeId == request.auth.uid
+        isClient() && resource.data.get('employeeId', '') == request.auth.uid
       );
 
       // Création : Une seule fois par le client du ticket, et seulement si le ticket est résolu
       allow create: if isClient() &&
-        request.resource.data.employeeId == request.auth.uid &&
-        request.resource.data.ticketId == ticketId &&
-        get(/databases/$(database)/documents/tickets/$(ticketId)).data.employeeId == request.auth.uid &&
-        get(/databases/$(database)/documents/tickets/$(ticketId)).data.status == 'resolved' &&
-        request.resource.data.rating >= 1 &&
-        request.resource.data.rating <= 5;
+        request.resource.data.get('employeeId', '') == request.auth.uid &&
+        request.resource.data.get('ticketId', '') == ticketId &&
+        get(/databases/$(database)/documents/tickets/$(ticketId)).data.get('employeeId', '') == request.auth.uid &&
+        get(/databases/$(database)/documents/tickets/$(ticketId)).data.get('status', '') == 'resolved' &&
+        request.resource.data.get('rating', 0) is int &&
+        request.resource.data.get('rating', 0) >= 1 &&
+        request.resource.data.get('rating', 0) <= 5;
 
-      // Un feedback ne peut plus être modifié ou supprimé
+      // Un feedback ne peut être ni modifié ni supprimé
       allow update, delete: if false;
     }
   }
