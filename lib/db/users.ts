@@ -130,5 +130,12 @@ export async function updateTechnicianStatus(
 
 export async function deleteUserProfile(uid: string): Promise<void> {
   const docRef = doc(db, USERS_COLLECTION, uid)
-  await deleteDoc(docRef)
+  await updateDoc(docRef, {
+    status: 'disabled',
+    updated_at: serverTimestamp(),
+  })
+}
+
+export async function disableUser(uid: string): Promise<void> {
+  return deleteUserProfile(uid)
 }

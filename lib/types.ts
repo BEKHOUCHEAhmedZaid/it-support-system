@@ -1,6 +1,6 @@
 export type Role = 'client' | 'technician' | 'admin'
 
-export type ProfileStatus = 'pending' | 'approved' | 'rejected'
+export type ProfileStatus = 'pending' | 'approved' | 'rejected' | 'disabled'
 
 export type Profile = {
   id: string

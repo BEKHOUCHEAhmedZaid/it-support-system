@@ -70,29 +70,18 @@ export function AuthForm({ role }: { role: Role }) {
     fd.append('email', email)
     fd.append('password', pass)
     
-    // First, try to log in normally
+    // Premier essai de connexion
     let result = await signIn(fd, demoRole)
     
-    // If login fails (which causes the 400 Bad Request if user doesn't exist), auto-create the demo account
-    if (result?.error) {
-      const { createClient } = await import('@/lib/supabase/client')
-      const supabase = createClient()
-      
-      // Auto-create the user to fix the 400 error silently
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password: pass,
-        options: {
-          data: {
-            full_name: `Demo ${demoRole}`,
-            role: demoRole,
-            status: 'approved'
-          }
-        }
-      })
-      
-      if (!signUpError && signUpData.user) {
-        // Now that the account is created, retry the login to ensure proper role checks
+    // Si l'utilisateur n'existe pas encore et qu'il s'agit d'un compte client ou technicien démo, on le crée
+    if (result?.error && demoRole !== 'admin') {
+      const demoFd = new FormData()
+      demoFd.append('email', email)
+      demoFd.append('password', pass)
+      demoFd.append('full_name', `Démo ${demoRole === 'technician' ? 'Technicien' : 'Client'}`)
+
+      const signUpResult = await signUp(demoFd, demoRole)
+      if (!signUpResult?.error) {
         result = await signIn(fd, demoRole)
       }
     }
