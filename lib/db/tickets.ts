@@ -11,7 +11,6 @@ import {
   onSnapshot,
   serverTimestamp,
   Timestamp,
-  or,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import type { Ticket, TicketCategory, TicketPriority, TicketStatus } from '@/lib/types'
@@ -143,30 +142,46 @@ export async function getTechnicianTickets(
 ): Promise<Ticket[]> {
   const colRef = collection(db, TICKETS_COLLECTION)
 
-  // Dans Supabase: or(technician_id == user.id OR status == 'open')
-  let q = query(
+  // 1. Requête pour les tickets assignés au technicien
+  let qAssigned = query(
     colRef,
-    or(
-      where('technicianId', '==', technicianId),
-      where('status', '==', 'open')
-    ),
+    where('technicianId', '==', technicianId),
     orderBy('createdAt', 'desc')
   )
 
   if (options?.status) {
-    q = query(
+    qAssigned = query(
       colRef,
-      or(
-        where('technicianId', '==', technicianId),
-        where('status', '==', 'open')
-      ),
+      where('technicianId', '==', technicianId),
       where('status', '==', options.status),
       orderBy('createdAt', 'desc')
     )
   }
 
-  const snap = await getDocs(q)
-  let tickets = snap.docs.map((d) => mapDocToTicket(d.id, d.data()))
+  // 2. Requête pour les tickets ouverts disponibles (si status non spécifié ou égal à 'open')
+  let openTickets: Ticket[] = []
+  if (!options?.status || options.status === 'open') {
+    const qOpen = query(
+      colRef,
+      where('status', '==', 'open'),
+      orderBy('createdAt', 'desc')
+    )
+    const snapOpen = await getDocs(qOpen)
+    openTickets = snapOpen.docs.map(d => mapDocToTicket(d.id, d.data()))
+  }
+
+  const snapAssigned = await getDocs(qAssigned)
+  const assignedTickets = snapAssigned.docs.map(d => mapDocToTicket(d.id, d.data()))
+
+  // 3. Fusion et tri sans doublons
+  const ticketMap = new Map<string, Ticket>()
+  for (const t of [...assignedTickets, ...openTickets]) {
+    ticketMap.set(t.id, t)
+  }
+
+  let tickets = Array.from(ticketMap.values()).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  )
 
   if (options?.search) {
     const s = options.search.toLowerCase()

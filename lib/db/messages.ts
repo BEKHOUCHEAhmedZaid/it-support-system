@@ -80,7 +80,7 @@ export async function sendMessage(
   return messageDoc.id
 }
 
-// Écoute en temps réel des messages d'un ticket (remplace Supabase realtime)
+// Écoute en temps réel des messages d'un ticket
 export function subscribeToMessages(
   ticketId: string,
   callback: (messages: Message[]) => void

@@ -1,37 +1,49 @@
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+'use client'
+
+import { useEffect, useState, use } from 'react'
 import Link from 'next/link'
 import type { Ticket } from '@/lib/types'
 import { TicketCard } from '@/components/ticket/TicketCard'
 import { TicketFilterUI } from '@/components/ticket/TicketFilterUI'
 import { RealTimeTickets } from '@/components/ticket/RealTimeTickets'
+import { useAuth } from '@/context/AuthContext'
+import { getClientTickets } from '@/lib/db/tickets'
 
-export default async function ClientTicketsPage({
+export default function ClientTicketsPage({
   searchParams,
 }: {
   searchParams: Promise<{ status?: string; search?: string }>
 }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/')
+  const params = use(searchParams)
+  const { user } = useAuth()
+  const [tickets, setTickets] = useState<Ticket[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const params = await searchParams
-  // Clients see ONLY their own tickets
-  let query = supabase
-    .from('tickets')
-    .select('*, technician:technician_id(id,full_name,role,avatar_url)')
-    .eq('employee_id', user.id)
-    .order('created_at', { ascending: false })
+  useEffect(() => {
+    if (!user) return
 
-  if (params.search) {
-    query = query.or(`title.ilike.%${params.search}%,description.ilike.%${params.search}%`)
-  }
+    let isMounted = true
+    setLoading(true)
 
-  if (params.status) {
-    query = query.eq('status', params.status)
-  }
+    getClientTickets(user.uid, {
+      status: params.status,
+      search: params.search,
+    })
+      .then((data) => {
+        if (isMounted) {
+          setTickets(data)
+          setLoading(false)
+        }
+      })
+      .catch((err) => {
+        console.error('Erreur chargement tickets client:', err)
+        if (isMounted) setLoading(false)
+      })
 
-  const { data: tickets } = await query
+    return () => {
+      isMounted = false
+    }
+  }, [user, params.status, params.search])
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto animate-in fade-in duration-700">
@@ -52,20 +64,34 @@ export default async function ClientTicketsPage({
 
       <TicketFilterUI />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {(tickets ?? []).map((ticket) => (
-          <TicketCard key={ticket.id} ticket={ticket as Ticket} role="client" />
-        ))}
-      </div>
-
-      {(tickets ?? []).length === 0 && (
-        <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
-          <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-gray-300">
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a2.999 2.999 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z"/></svg>
+      {loading ? (
+        <div className="py-20 text-center">
+          <div className="flex items-center justify-center gap-3">
+            <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+            </svg>
+            <span className="text-sm font-medium text-gray-500">Chargement de vos tickets...</span>
           </div>
-          <p className="text-gray-500 font-medium">Vous n&apos;avez pas encore créé de ticket.</p>
-          <Link href="/client/tickets/new" className="text-primary font-bold text-sm mt-2 inline-block hover:underline">Signaler un problème maintenant</Link>
         </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {tickets.map((ticket) => (
+              <TicketCard key={ticket.id} ticket={ticket} role="client" />
+            ))}
+          </div>
+
+          {tickets.length === 0 && (
+            <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
+              <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-gray-300">
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a2.999 2.999 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z"/></svg>
+              </div>
+              <p className="text-gray-500 font-medium">Vous n&apos;avez pas encore créé de ticket.</p>
+              <Link href="/client/tickets/new" className="text-primary font-bold text-sm mt-2 inline-block hover:underline">Signaler un problème maintenant</Link>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

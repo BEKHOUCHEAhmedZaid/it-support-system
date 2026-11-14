@@ -1,71 +1,45 @@
-'use server'
-import { createClient } from '@/lib/supabase/server'
-import { revalidatePath } from 'next/cache'
+'use client'
+
+import {
+  updateTechnicianStatus as dbUpdateTechnicianStatus,
+  deleteUserProfile as dbDeleteUserProfile,
+  getUserProfile,
+} from '@/lib/db/users'
+import { assignTicket as dbAssignTicket } from '@/lib/db/tickets'
 
 export async function updateTechnicianStatus(userId: string, status: 'approved' | 'rejected') {
-  const supabase = await createClient()
-  
-  console.log(`[Admin] Updating status for user ${userId} to ${status}...`)
-  
-  const { error } = await supabase
-    .from('profiles')
-    .update({ status })
-    .eq('id', userId)
-
-  if (error) {
-    console.error(`[Admin] Error updating status for ${userId}:`, error)
-    return { error: error.message }
+  try {
+    await dbUpdateTechnicianStatus(userId, status)
+    return { success: true }
+  } catch (error: any) {
+    console.error(`[Admin] Erreur mise à jour statut technicien ${userId}:`, error)
+    return { error: error.message || 'Erreur lors de la mise à jour.' }
   }
-
-  console.log(`[Admin] Successfully updated user ${userId} to ${status}`)
-
-  revalidatePath('/admin/technicians')
-  return { success: true }
 }
 
 export async function assignTicket(ticketId: string, technicianId: string) {
-  const supabase = await createClient()
-
-  const { error } = await supabase
-    .from('tickets')
-    .update({ 
-      technician_id: technicianId,
-      status: 'in_progress' 
-    })
-    .eq('id', ticketId)
-
-  if (error) {
-    console.error('Error assigning ticket:', error)
-    return { error: error.message }
+  try {
+    const techProfile = await getUserProfile(technicianId)
+    await dbAssignTicket(
+      ticketId,
+      technicianId,
+      techProfile?.full_name || 'Technicien',
+      techProfile?.avatar_url || null
+    )
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erreur assignation ticket par admin:', error)
+    return { error: error.message || 'Erreur lors de l\'assignation.' }
   }
-
-  revalidatePath('/admin/tickets')
-  revalidatePath('/technician/tickets')
-  return { success: true }
 }
 
 export async function deleteUser(userId: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) return { error: 'Non authentifié' }
-  if (user.id === userId) return { error: 'Vous ne pouvez pas supprimer votre propre compte' }
-
-  console.log(`[Admin] Deleting user ${userId}...`)
-
-  const { error } = await supabase
-    .from('profiles')
-    .delete()
-    .eq('id', userId)
-
-  if (error) {
-    console.error(`[Admin] Error deleting user ${userId}:`, error)
-    return { error: error.message }
+  try {
+    // Soft-delete : passe le statut du profil à 'disabled'
+    await dbDeleteUserProfile(userId)
+    return { success: true }
+  } catch (error: any) {
+    console.error(`[Admin] Erreur désactivation utilisateur ${userId}:`, error)
+    return { error: error.message || 'Erreur lors de la désactivation du compte.' }
   }
-
-  console.log(`[Admin] Successfully deleted user ${userId}`)
-
-  revalidatePath('/admin/users')
-  revalidatePath('/admin/technicians')
-  return { success: true }
 }

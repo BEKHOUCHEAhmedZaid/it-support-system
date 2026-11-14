@@ -1,120 +1,121 @@
-'use server'
-import { createClient } from '@/lib/supabase/server'
-import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
+'use client'
+
+import { auth } from '@/lib/firebase'
+import {
+  createTicket as dbCreateTicket,
+  assignTicket as dbAssignTicket,
+  resolveTicket as dbResolveTicket,
+} from '@/lib/db/tickets'
+import { sendMessage as dbSendMessage } from '@/lib/db/messages'
+import { submitFeedback as dbSubmitFeedback } from '@/lib/db/feedback'
+import { getUserProfile } from '@/lib/db/users'
+import type { TicketCategory, TicketPriority } from '@/lib/types'
 
 // ── CREATE TICKET ──────────────────────────────────
 export async function createTicket(formData: FormData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = auth.currentUser
   if (!user) return { error: 'Non authentifié' }
 
-  const title          = formData.get('title') as string
-  const description    = formData.get('description') as string
-  const category       = formData.get('category') as string
-  const priority       = formData.get('priority') as string
-  const screenshot_url = formData.get('screenshot_url') as string | null
-  const system_info    = formData.get('system_info') as string || ''
+  const title = (formData.get('title') as string)?.trim()
+  const description = (formData.get('description') as string)?.trim()
+  const category = formData.get('category') as TicketCategory
+  const priority = formData.get('priority') as TicketPriority
+  const screenshot_url = (formData.get('screenshot_url') as string) || null
+  const system_info = (formData.get('system_info') as string) || ''
 
-  console.log("Creating ticket for user:", user.id);
-
-  const { data, error } = await supabase.from('tickets').insert({
-    employee_id: user.id,
-    title,
-    description,
-    category,
-    priority,
-    status: 'open',
-    screenshot_url,
-    system_info,
-  }).select().single()
-
-  if (error) {
-    console.error("Supabase Error:", error);
-    return { error: error.message }
+  if (!title || !description) {
+    return { error: 'Veuillez remplir le titre et la description.' }
   }
 
-  console.log("Ticket created successfully:", data);
+  try {
+    const profile = await getUserProfile(user.uid)
+    const employeeName = profile?.full_name || user.displayName || 'Client'
+    const employeeAvatar = profile?.avatar_url || user.photoURL || null
 
-  revalidatePath('/client/tickets')
-  revalidatePath('/admin/tickets')
-  redirect(`/client/tickets/${data.id}`)
+    const ticketId = await dbCreateTicket({
+      employeeId: user.uid,
+      employeeName,
+      employeeAvatar,
+      title,
+      description,
+      category,
+      priority,
+      screenshotUrl: screenshot_url,
+      systemInfo: system_info,
+    })
+
+    return { id: ticketId }
+  } catch (error: any) {
+    console.error('Erreur création ticket:', error)
+    return { error: error.message || 'Erreur lors de la création du ticket.' }
+  }
 }
 
-// ── ASSIGN TICKET ──────────────────────────────────
+// ── ASSIGN TICKET (TECHNICIAN CLAIM) ───────────────
 export async function assignTicket(ticketId: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = auth.currentUser
   if (!user) return { error: 'Non authentifié' }
 
-  console.log(`[Action] User ${user.id} attempting to claim ticket ${ticketId}`)
+  try {
+    const profile = await getUserProfile(user.uid)
+    const technicianName = profile?.full_name || user.displayName || 'Technicien'
+    const technicianAvatar = profile?.avatar_url || user.photoURL || null
 
-  const { error } = await supabase
-    .from('tickets')
-    .update({ 
-      technician_id: user.id, 
-      status: 'in_progress' 
-    })
-    .eq('id', ticketId)
-    .is('technician_id', null) // Only claim if unassigned
-
-  if (error) {
-    console.error(`[Action] Error claiming ticket ${ticketId}:`, error)
-    return { error: error.message }
+    await dbAssignTicket(ticketId, user.uid, technicianName, technicianAvatar)
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erreur réservation ticket:', error)
+    return { error: error.message || 'Erreur lors de la réservation du ticket.' }
   }
-
-  console.log(`[Action] Successfully claimed ticket ${ticketId}`)
-
-  revalidatePath(`/technician/tickets/${ticketId}`)
-  revalidatePath('/technician/tickets')
-  revalidatePath('/admin/tickets')
-  revalidatePath(`/admin/tickets/${ticketId}`)
-  
-  return { success: true }
 }
 
 // ── RESOLVE TICKET ─────────────────────────────────
 export async function resolveTicket(ticketId: string, resolution: string) {
-  const supabase = await createClient()
-  const { error } = await supabase
-    .from('tickets')
-    .update({ 
-      status: 'resolved', 
-      resolution,
-      resolved_at: new Date().toISOString()
-    })
-    .eq('id', ticketId)
-
-  if (error) return { error: error.message }
-  revalidatePath(`/technician/tickets/${ticketId}`)
-  revalidatePath('/technician/tickets')
-  revalidatePath('/admin/tickets')
-  revalidatePath(`/client/tickets/${ticketId}`)
+  try {
+    await dbResolveTicket(ticketId, resolution)
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erreur résolution ticket:', error)
+    return { error: error.message || 'Erreur lors de la résolution du ticket.' }
+  }
 }
 
 // ── SEND MESSAGE ───────────────────────────────────
 export async function sendMessage(ticketId: string, content: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = auth.currentUser
   if (!user) return { error: 'Non authentifié' }
 
-  const { error } = await supabase.from('messages').insert({
-    ticket_id: ticketId,
-    sender_id: user.id,
-    content,
-  })
-  if (error) return { error: error.message }
+  try {
+    const profile = await getUserProfile(user.uid)
+    await dbSendMessage(ticketId, {
+      senderId: user.uid,
+      senderName: profile?.full_name || 'Utilisateur',
+      senderRole: profile?.role || 'client',
+      senderAvatar: profile?.avatar_url || null,
+      content,
+    })
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erreur envoi message:', error)
+    return { error: error.message || 'Erreur lors de l\'envoi du message.' }
+  }
 }
 
 // ── SUBMIT FEEDBACK ────────────────────────────────
 export async function submitFeedback(ticketId: string, rating: number, comment: string) {
-  const supabase = await createClient()
-  const { error } = await supabase.from('feedback').insert({
-    ticket_id: ticketId,
-    rating,
-    comment,
-  })
-  if (error) return { error: error.message }
+  const user = auth.currentUser
+  if (!user) return { error: 'Non authentifié' }
 
-  revalidatePath(`/client/tickets/${ticketId}`)
+  try {
+    await dbSubmitFeedback({
+      ticketId,
+      employeeId: user.uid,
+      rating,
+      comment,
+    })
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erreur soumission feedback:', error)
+    return { error: error.message || 'Erreur lors de la soumission du feedback.' }
+  }
 }

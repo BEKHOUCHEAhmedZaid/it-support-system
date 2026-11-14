@@ -1,32 +1,21 @@
 'use client'
+
 import { useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { subscribeToTickets } from '@/lib/db/tickets'
 
 export function RealTimeTickets() {
   const router = useRouter()
-  const supabase = createClient()
 
   useEffect(() => {
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tickets'
-        },
-        () => {
-          router.refresh()
-        }
-      )
-      .subscribe()
+    const unsubscribe = subscribeToTickets(() => {
+      router.refresh()
+    })
 
     return () => {
-      supabase.removeChannel(channel)
+      unsubscribe()
     }
-  }, [supabase, router])
+  }, [router])
 
   return null
 }

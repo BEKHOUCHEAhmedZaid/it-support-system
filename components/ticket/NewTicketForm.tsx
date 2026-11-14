@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { createTicket } from '@/lib/actions/tickets'
 import { collectSystemInfo } from '@/lib/system-info'
 import { Input }            from '@/components/ui/Input'
@@ -22,6 +23,7 @@ const PRIORITIES = [
 ]
 
 export function NewTicketForm({ userId }: { userId: string }) {
+  const router = useRouter()
   const [screenshotUrl, setScreenshotUrl] = useState<string>('')
   const [submitting, setSubmitting]       = useState(false)
   const [error, setError]                 = useState<string | null>(null)
@@ -44,7 +46,13 @@ export function NewTicketForm({ userId }: { userId: string }) {
     fd.set('screenshot_url', screenshotUrl)
     fd.set('system_info', systemInfo)
     const result = await createTicket(fd)
-    if (result?.error) { setError(result.error); setSubmitting(false) }
+    if (result?.error) {
+      setError(result.error)
+      setSubmitting(false)
+    } else if (result?.id) {
+      router.push(`/client/tickets/${result.id}`)
+      router.refresh()
+    }
   }
 
   return (

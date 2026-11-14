@@ -1,25 +1,23 @@
-'use server'
-import { createClient } from '@/lib/supabase/server'
-import { revalidatePath } from 'next/cache'
+'use client'
+
+import { auth } from '@/lib/firebase'
+import { updateUserProfile } from '@/lib/db/users'
 
 export async function updateProfile(formData: FormData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = auth.currentUser
   if (!user) return { error: 'Non authentifié' }
 
-  const fullName  = formData.get('full_name') as string
-  const avatarUrl = formData.get('avatar_url') as string
+  const fullName = (formData.get('full_name') as string)?.trim() || null
+  const avatarUrl = (formData.get('avatar_url') as string)?.trim() || null
 
-  const { error } = await supabase
-    .from('profiles')
-    .update({
+  try {
+    await updateUserProfile(user.uid, {
       full_name: fullName,
       avatar_url: avatarUrl,
     })
-    .eq('id', user.id)
-
-  if (error) return { error: error.message }
-
-  revalidatePath('/', 'layout')
-  return { success: true }
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erreur mise à jour profil:', error)
+    return { error: error.message || 'Erreur lors de la mise à jour du profil.' }
+  }
 }

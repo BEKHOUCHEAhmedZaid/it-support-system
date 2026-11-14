@@ -1,18 +1,12 @@
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+'use client'
+
 import { ProfileForm } from '@/components/profile/ProfileForm'
-import type { Profile } from '@/lib/types'
+import { useAuth } from '@/context/AuthContext'
 
-export default async function TechnicianProfilePage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/')
+export default function TechnicianProfilePage() {
+  const { profile } = useAuth()
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  if (!profile) return null
 
   return (
     <div className="space-y-8 max-w-4xl mx-auto animate-in fade-in duration-700">
@@ -20,7 +14,7 @@ export default async function TechnicianProfilePage() {
         <h1 className="text-3xl font-black text-gray-900 tracking-tight">Mon Profil</h1>
         <p className="text-sm text-gray-500 mt-1">Gérez vos informations personnelles et votre avatar.</p>
       </div>
-      <ProfileForm profile={profile as Profile} />
+      <ProfileForm profile={profile} />
     </div>
   )
 }

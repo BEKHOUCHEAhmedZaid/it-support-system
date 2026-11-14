@@ -1,11 +1,11 @@
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+'use client'
+
 import { MessageCenter } from '@/components/ticket/MessageCenter'
+import { useAuth } from '@/context/AuthContext'
 
-export default async function TechnicianMessagesPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/')
+export default function TechnicianMessagesPage() {
+  const { user } = useAuth()
+  if (!user) return null
 
-  return <MessageCenter role="technician" userId={user.id} />
+  return <MessageCenter role="technician" userId={user.uid} />
 }
