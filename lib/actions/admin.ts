@@ -23,8 +23,7 @@ export async function assignTicket(ticketId: string, technicianId: string) {
     await dbAssignTicket(
       ticketId,
       technicianId,
-      techProfile?.full_name || 'Technicien',
-      techProfile?.avatar_url || null
+      techProfile?.full_name || 'Technicien'
     )
     return { success: true }
   } catch (error: any) {

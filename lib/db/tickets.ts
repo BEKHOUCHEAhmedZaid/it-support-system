@@ -50,13 +50,13 @@ function mapDocToTicket(docId: string, data: Record<string, any>): Ticket {
       id: data.employeeId || '',
       role: 'client',
       full_name: data.employeeName,
-      avatar_url: data.employeeAvatar || null,
+      avatar_url: null, // avatar non copié dans les tickets — affichage par initiales
     } : (data.employee ?? undefined),
     technician: data.technicianId ? {
       id: data.technicianId,
       role: 'technician',
       full_name: data.technicianName ?? null,
-      avatar_url: data.technicianAvatar ?? null,
+      avatar_url: null, // avatar non copié dans les tickets — affichage par initiales
     } : null,
   }
 }
@@ -64,7 +64,7 @@ function mapDocToTicket(docId: string, data: Record<string, any>): Ticket {
 export async function createTicket(data: {
   employeeId: string
   employeeName: string
-  employeeAvatar?: string | null
+  // employeeAvatar intentionnellement absent : on n'enregistre plus l'avatar dans le ticket
   title: string
   description: string
   category: TicketCategory
@@ -76,10 +76,9 @@ export async function createTicket(data: {
   const docRef = await addDoc(colRef, {
     employeeId: data.employeeId,
     employeeName: data.employeeName,
-    employeeAvatar: data.employeeAvatar ?? null,
+    // Pas d'employeeAvatar ni technicianAvatar dans le document ticket
     technicianId: null,
     technicianName: null,
-    technicianAvatar: null,
     title: data.title,
     description: data.description,
     category: data.category,
@@ -218,13 +217,12 @@ export async function assignTicket(
   ticketId: string,
   technicianId: string,
   technicianName?: string | null,
-  technicianAvatar?: string | null
+  // technicianAvatar supprimé : non stocké dans le ticket, affichage par initiales
 ): Promise<void> {
   const docRef = doc(db, TICKETS_COLLECTION, ticketId)
   await updateDoc(docRef, {
     technicianId,
     technicianName: technicianName ?? null,
-    technicianAvatar: technicianAvatar ?? null,
     status: 'in_progress',
     updatedAt: serverTimestamp(),
   })

@@ -32,11 +32,12 @@ function mapDocToMessage(docId: string, ticketId: string, data: Record<string, a
     sender_id: data.senderId || data.sender_id || '',
     content: data.content || '',
     created_at: formatTimestamp(data.createdAt || data.created_at),
+    // On reconstruit sender SANS avatar : le chat affiche les initiales
     sender: data.senderName ? {
       id: data.senderId || data.sender_id || '',
       role: (data.senderRole || 'client') as Role,
       full_name: data.senderName,
-      avatar_url: data.senderAvatar ?? null,
+      avatar_url: null, // jamais copié dans les messages
     } : (data.sender ?? undefined),
   }
 }
@@ -54,7 +55,8 @@ export async function sendMessage(
     senderId: string
     senderName: string
     senderRole: Role
-    senderAvatar?: string | null
+    // senderAvatar intentionnellement absent : on affiche les initiales dans le chat
+    // pour ne pas dupliquer une image base64 dans chaque document message
     content: string
   }
 ): Promise<string> {
@@ -63,7 +65,6 @@ export async function sendMessage(
     senderId: data.senderId,
     senderName: data.senderName,
     senderRole: data.senderRole,
-    senderAvatar: data.senderAvatar ?? null,
     content: data.content,
     createdAt: serverTimestamp(),
   })

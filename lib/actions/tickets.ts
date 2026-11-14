@@ -35,7 +35,7 @@ export async function createTicket(formData: FormData) {
     const ticketId = await dbCreateTicket({
       employeeId: user.uid,
       employeeName,
-      employeeAvatar,
+      // employeeAvatar n'est plus stocké dans le ticket
       title,
       description,
       category,
@@ -59,9 +59,9 @@ export async function assignTicket(ticketId: string) {
   try {
     const profile = await getUserProfile(user.uid)
     const technicianName = profile?.full_name || user.displayName || 'Technicien'
-    const technicianAvatar = profile?.avatar_url || user.photoURL || null
+    // technicianAvatar non passé : non stocké dans le ticket
 
-    await dbAssignTicket(ticketId, user.uid, technicianName, technicianAvatar)
+    await dbAssignTicket(ticketId, user.uid, technicianName)
     return { success: true }
   } catch (error: any) {
     console.error('Erreur réservation ticket:', error)
@@ -91,7 +91,7 @@ export async function sendMessage(ticketId: string, content: string) {
       senderId: user.uid,
       senderName: profile?.full_name || 'Utilisateur',
       senderRole: profile?.role || 'client',
-      senderAvatar: profile?.avatar_url || null,
+      // senderAvatar non stocké dans les messages : affichage par initiales dans le chat
       content,
     })
     return { success: true }

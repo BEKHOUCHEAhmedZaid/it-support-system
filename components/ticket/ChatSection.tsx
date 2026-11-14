@@ -42,7 +42,7 @@ export function ChatSection({ ticketId, currentUserId, initialMessages }: Props)
         senderId: currentUserId,
         senderName: profile.full_name || 'Utilisateur',
         senderRole: profile.role,
-        senderAvatar: profile.avatar_url,
+        // senderAvatar intentionnellement absent : affichage par initiales uniquement
         content: content.trim(),
       })
       setContent('')
@@ -76,18 +76,36 @@ export function ChatSection({ ticketId, currentUserId, initialMessages }: Props)
         {messages.map((msg) => {
           const isMe = msg.sender_id === currentUserId
           const isTechnician = msg.sender?.role === 'technician'
-          
+          const senderName = msg.sender?.full_name || 'Utilisateur'
+          // Initiales : max 2 caractères (ex: "JD" pour "Jean Dupont")
+          const initials = senderName
+            .split(' ')
+            .map((w) => w[0] ?? '')
+            .join('')
+            .substring(0, 2)
+            .toUpperCase()
+
           return (
-            <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+            <div key={msg.id} className={`flex items-end gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+              {/* Initiales à la place de l'avatar */}
+              <div className={`flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center text-[10px] font-black select-none
+                ${isMe ? 'bg-blue-100 text-primary' : isTechnician ? 'bg-sidebar text-white' : 'bg-gray-200 text-gray-600'}`}>
+                {initials}
+              </div>
               <div
-                className={`max-w-[85%] rounded-2xl px-5 py-3 text-sm leading-relaxed relative
-                  ${isMe 
-                    ? 'bg-blue-50 text-gray-800 rounded-tr-sm' 
-                    : isTechnician 
-                      ? 'bg-sidebar text-white rounded-tl-sm' 
+                className={`max-w-[80%] rounded-2xl px-5 py-3 text-sm leading-relaxed
+                  ${isMe
+                    ? 'bg-blue-50 text-gray-800 rounded-tr-sm'
+                    : isTechnician
+                      ? 'bg-sidebar text-white rounded-tl-sm'
                       : 'bg-gray-100 text-gray-800 rounded-tl-sm'
                   }`}
               >
+                {!isMe && (
+                  <p className={`text-[10px] font-black mb-1 ${isTechnician ? 'text-blue-200' : 'text-gray-400'}`}>
+                    {senderName}
+                  </p>
+                )}
                 {msg.content}
                 <div className={`text-[10px] mt-1.5 opacity-40 text-right ${isTechnician && !isMe ? 'text-blue-100' : 'text-gray-500'}`}>
                   {new Date(msg.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}

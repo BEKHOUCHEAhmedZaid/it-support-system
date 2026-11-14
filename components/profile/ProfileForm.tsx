@@ -9,6 +9,16 @@ interface Props {
   profile: Profile
 }
 
+function getInitials(name: string | null): string {
+  if (!name) return '?'
+  return name
+    .split(' ')
+    .map((w) => w[0] ?? '')
+    .join('')
+    .substring(0, 2)
+    .toUpperCase()
+}
+
 export function ProfileForm({ profile }: Props) {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -35,10 +45,11 @@ export function ProfileForm({ profile }: Props) {
     <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in duration-700">
       <div className="bg-white rounded-3xl border border-gray-100 p-8 shadow-xl shadow-gray-100/30 space-y-8">
         <div className="flex flex-col items-center gap-6">
-          <AvatarUpload 
-            userId={profile.id} 
-            currentAvatar={avatarUrl} 
-            onUploaded={setAvatarUrl} 
+          <AvatarUpload
+            userId={profile.id}
+            currentAvatar={avatarUrl}
+            onUploaded={setAvatarUrl}
+            initials={getInitials(profile.full_name)}
           />
           <div className="text-center">
             <h2 className="text-xl font-black text-gray-900">{profile.full_name}</h2>
