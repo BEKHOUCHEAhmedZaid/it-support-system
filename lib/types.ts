@@ -1,4 +1,4 @@
-export type Role = 'client' | 'technician' | 'admin' | 'employee' // keeping employee for backward compatibility during migration
+export type Role = 'client' | 'technician' | 'admin'
 
 export type ProfileStatus = 'pending' | 'approved' | 'rejected'
 
@@ -7,10 +7,11 @@ export type Profile = {
   role: Role
   full_name: string | null
   avatar_url: string | null
-  status?: ProfileStatus // mainly for technicians
+  status?: ProfileStatus
+  email?: string
 }
 
-export type TicketStatus  = 'open' | 'new' | 'in_progress' | 'resolved'
+export type TicketStatus = 'open' | 'new' | 'in_progress' | 'resolved'
 export type TicketPriority = 'bloquant' | 'haute' | 'normale'
 export type TicketCategory = 'Réseau' | 'Logiciel' | 'Matériel' | 'Autre'
 
@@ -23,17 +24,19 @@ export type Ticket = {
   category: TicketCategory
   priority: TicketPriority
   status: TicketStatus
-  system_info: Record<string, unknown>
+  system_info: Record<string, unknown> | string
   screenshot_url: string | null
   created_at: string
   resolved_at: string | null
   resolution: string | null
   employee?: Profile
   technician?: Profile | null
+  has_messages?: boolean
+  last_message_at?: string | null
 }
 
 export type Message = {
-  id: number
+  id: string
   ticket_id: string
   sender_id: string
   content: string
@@ -42,7 +45,7 @@ export type Message = {
 }
 
 export type FaqArticle = {
-  id: number
+  id: string
   title: string
   content: string
   category: string | null
@@ -53,7 +56,7 @@ export type FaqArticle = {
 }
 
 export type Feedback = {
-  id: number
+  id: string
   ticket_id: string
   rating: number
   comment: string | null
