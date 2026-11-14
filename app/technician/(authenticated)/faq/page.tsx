@@ -1,18 +1,17 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { FaqList } from '@/components/faq/FaqList'
 import { FaqCreateForm } from '@/components/faq/FaqCreateForm'
 import Link from 'next/link'
 import type { FaqArticle } from '@/lib/types'
 import { getFaqArticles } from '@/lib/db/faq'
 
-export default function TechnicianFaqPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ prefill?: string }>
-}) {
-  const params = use(searchParams)
+function TechnicianFaqContent() {
+  const searchParams = useSearchParams()
+  const prefillParam = searchParams.get('prefill')
+
   const [articles, setArticles] = useState<FaqArticle[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -36,9 +35,9 @@ export default function TechnicianFaqPage({
   }, [])
 
   let prefill: { title?: string; content?: string; category?: string } = {}
-  if (params.prefill) {
+  if (prefillParam) {
     try {
-      prefill = JSON.parse(decodeURIComponent(params.prefill))
+      prefill = JSON.parse(decodeURIComponent(prefillParam))
     } catch {}
   }
 
@@ -90,5 +89,23 @@ export default function TechnicianFaqPage({
         </div>
       </div>
     </div>
+  )
+}
+
+export default function TechnicianFaqPage() {
+  return (
+    <Suspense fallback={
+      <div className="py-20 text-center">
+        <div className="flex items-center justify-center gap-3">
+          <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+          </svg>
+          <span className="text-sm font-medium text-gray-500">Chargement...</span>
+        </div>
+      </div>
+    }>
+      <TechnicianFaqContent />
+    </Suspense>
   )
 }

@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import type { Ticket } from '@/lib/types'
 import { TicketCard } from '@/components/ticket/TicketCard'
@@ -9,12 +10,11 @@ import { RealTimeTickets } from '@/components/ticket/RealTimeTickets'
 import { useAuth } from '@/context/AuthContext'
 import { getClientTickets } from '@/lib/db/tickets'
 
-export default function ClientTicketsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ status?: string; search?: string }>
-}) {
-  const params = use(searchParams)
+function ClientTicketsContent() {
+  const searchParams = useSearchParams()
+  const statusFilter = searchParams.get('status') ?? undefined
+  const searchFilter = searchParams.get('search') ?? undefined
+
   const { user } = useAuth()
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(true)
@@ -26,8 +26,8 @@ export default function ClientTicketsPage({
     setLoading(true)
 
     getClientTickets(user.uid, {
-      status: params.status,
-      search: params.search,
+      status: statusFilter,
+      search: searchFilter,
     })
       .then((data) => {
         if (isMounted) {
@@ -43,7 +43,7 @@ export default function ClientTicketsPage({
     return () => {
       isMounted = false
     }
-  }, [user, params.status, params.search])
+  }, [user, statusFilter, searchFilter])
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto animate-in fade-in duration-700">
@@ -94,5 +94,23 @@ export default function ClientTicketsPage({
         </>
       )}
     </div>
+  )
+}
+
+export default function ClientTicketsPage() {
+  return (
+    <Suspense fallback={
+      <div className="py-20 text-center">
+        <div className="flex items-center justify-center gap-3">
+          <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+          </svg>
+          <span className="text-sm font-medium text-gray-500">Chargement...</span>
+        </div>
+      </div>
+    }>
+      <ClientTicketsContent />
+    </Suspense>
   )
 }

@@ -1,6 +1,7 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import type { Ticket } from '@/lib/types'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -8,15 +9,11 @@ import { PriorityBadge } from '@/components/ui/PriorityBadge'
 import { useAuth } from '@/context/AuthContext'
 import { getTechnicianTickets } from '@/lib/db/tickets'
 
-export default function TechnicianTicketsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    status?: string
-    search?: string
-  }>
-}) {
-  const params = use(searchParams)
+function TechnicianTicketsContent() {
+  const searchParams = useSearchParams()
+  const statusFilter = searchParams.get('status') ?? undefined
+  const searchFilter = searchParams.get('search') ?? undefined
+
   const { user } = useAuth()
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(true)
@@ -28,8 +25,8 @@ export default function TechnicianTicketsPage({
     setLoading(true)
 
     getTechnicianTickets(user.uid, {
-      status: params.status,
-      search: params.search,
+      status: statusFilter,
+      search: searchFilter,
     })
       .then((data) => {
         if (isMounted) {
@@ -45,7 +42,7 @@ export default function TechnicianTicketsPage({
     return () => {
       isMounted = false
     }
-  }, [user, params.status, params.search])
+  }, [user, statusFilter, searchFilter])
 
   const inProgressCount = tickets.filter(t => t.status === 'in_progress').length
   const resolvedTodayCount = tickets.filter(
@@ -146,5 +143,23 @@ export default function TechnicianTicketsPage({
         </div>
       </div>
     </div>
+  )
+}
+
+export default function TechnicianTicketsPage() {
+  return (
+    <Suspense fallback={
+      <div className="py-20 text-center">
+        <div className="flex items-center justify-center gap-3">
+          <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+          </svg>
+          <span className="text-sm font-medium text-gray-500">Chargement...</span>
+        </div>
+      </div>
+    }>
+      <TechnicianTicketsContent />
+    </Suspense>
   )
 }

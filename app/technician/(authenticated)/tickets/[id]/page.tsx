@@ -1,7 +1,7 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
-import { notFound } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useParams, notFound } from 'next/navigation'
 import Link from 'next/link'
 import type { Ticket, SystemInfo, Feedback } from '@/lib/types'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -17,15 +17,17 @@ import { getFeedback } from '@/lib/db/feedback'
 export default function TechnicianTicketDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }>
+  params?: { id: string }
 }) {
-  const { id } = use(params)
+  const routeParams = useParams()
+  const id = params?.id || (routeParams?.id as string)
   const { user } = useAuth()
   const [ticket, setTicket] = useState<Ticket | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!id) return
     let isMounted = true
     Promise.all([getTicketById(id), getFeedback(id)])
       .then(([t, f]) => {
