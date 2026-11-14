@@ -1,0 +1,217 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // FONCTIONS D'AIDE ET DE SÉCURITÉ
+    // ===============================================================
+
+    // Vérifie si l'utilisateur est authentifié avec Firebase Auth
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Récupère les données du document profil dans users/{uid}
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // Vérifie si l'utilisateur a un profil existant et actif (non 'disabled')
+    function isActiveUser() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        getUserData().status != 'disabled';
+    }
+
+    // Vérifie si l'utilisateur est un administrateur actif
+    function isAdmin() {
+      return isActiveUser() && getUserData().role == 'admin';
+    }
+
+    // Vérifie si l'utilisateur est un technicien approuvé
+    function isApprovedTechnician() {
+      return isActiveUser() &&
+        getUserData().role == 'technician' &&
+        getUserData().status == 'approved';
+    }
+
+    // Vérifie si l'utilisateur est un client actif
+    function isClient() {
+      return isActiveUser() && getUserData().role == 'client';
+    }
+
+    // Règle par défaut : Tout interdire
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // 1. COLLECTION USERS
+    // ===============================================================
+    match /users/{uid} {
+      // Lecture : Soit son propre profil, soit un admin, soit les utilisateurs actifs (pour afficher noms/avatars des interlocuteurs)
+      allow read: if isActiveUser() && (
+        request.auth.uid == uid ||
+        isAdmin() ||
+        isApprovedTechnician() ||
+        isClient()
+      );
+
+      // Création : Un utilisateur ne peut créer QUE son propre profil
+      // Rôle restreint à 'client' (status 'approved') ou 'technician' (status 'pending'). JAMAIS 'admin'.
+      allow create: if isSignedIn() &&
+        request.auth.uid == uid &&
+        request.resource.data.uid == uid &&
+        request.resource.data.email is string &&
+        (
+          (request.resource.data.role == 'client' && request.resource.data.status == 'approved') ||
+          (request.resource.data.role == 'technician' && request.resource.data.status == 'pending')
+        );
+
+      // Modification :
+      // - L'admin a les pleins pouvoirs (changer les rôles, approuver/rejeter, désactiver un compte).
+      // - L'utilisateur peut modifier UNIQUEMENT ses informations personnelles (nom, avatar),
+      //   et ne peut JAMAIS modifier son rôle, son statut, son email ou son UID.
+      allow update: if (
+        isAdmin()
+      ) || (
+        isActiveUser() &&
+        request.auth.uid == uid &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.uid == resource.data.uid
+      );
+
+      // Suppression définitive interdite (on utilise status: 'disabled'), seul l'admin peut supprimer le document si nécessaire
+      allow delete: if isAdmin();
+    }
+
+    // ===============================================================
+    // 2. COLLECTION TICKETS & SOUS-COLLECTION MESSAGES
+    // ===============================================================
+    match /tickets/{ticketId} {
+      // Lecture :
+      // - Admin : tout
+      // - Client : uniquement ses propres tickets
+      // - Technicien approuvé : les tickets ouverts ou ceux qui lui sont assignés
+      allow read: if isAdmin() || (
+        isClient() && resource.data.employeeId == request.auth.uid
+      ) || (
+        isApprovedTechnician() && (
+          resource.data.status == 'open' || resource.data.technicianId == request.auth.uid
+        )
+      );
+
+      // Création :
+      // - Client : crée un ticket avec son propre employeeId, statut 'open' et non assigné
+      // - Admin : création autorisée
+      allow create: if isAdmin() || (
+        isClient() &&
+        request.resource.data.employeeId == request.auth.uid &&
+        request.resource.data.status == 'open' &&
+        request.resource.data.technicianId == null &&
+        request.resource.data.title is string &&
+        request.resource.data.title.size() > 0 &&
+        request.resource.data.description is string &&
+        request.resource.data.category in ['Réseau', 'Logiciel', 'Matériel', 'Autre'] &&
+        request.resource.data.priority in ['bloquant', 'haute', 'normale']
+      );
+
+      // Modification :
+      // - Admin : tout
+      // - Technicien approuvé :
+      //     * S'assigner un ticket non assigné
+      //     * Résoudre un ticket qui lui est déjà assigné
+      //     Les champs structurels du ticket (employeeId, etc.) restent immuables.
+      // - Client ou Technicien assigné : mettre à jour hasMessages et lastMessageAt lors de l'envoi d'un message
+      allow update: if isAdmin() || (
+        isApprovedTechnician() && (
+          // Prise en charge d'un ticket libre
+          (
+            (resource.data.technicianId == null || resource.data.status == 'open') &&
+            request.resource.data.technicianId == request.auth.uid &&
+            request.resource.data.status == 'in_progress' &&
+            request.resource.data.employeeId == resource.data.employeeId
+          ) ||
+          // Résolution d'un ticket assigné
+          (
+            resource.data.technicianId == request.auth.uid &&
+            request.resource.data.status == 'resolved' &&
+            request.resource.data.resolution is string &&
+            request.resource.data.employeeId == resource.data.employeeId
+          )
+        )
+      ) || (
+        // Mise à jour des métadonnées de messages (hasMessages, lastMessageAt)
+        isActiveUser() && (
+          (isClient() && resource.data.employeeId == request.auth.uid) ||
+          (isApprovedTechnician() && resource.data.technicianId == request.auth.uid)
+        ) &&
+        request.resource.data.employeeId == resource.data.employeeId &&
+        request.resource.data.title == resource.data.title &&
+        request.resource.data.status == resource.data.status
+      );
+
+      // Suppression : Admin uniquement
+      allow delete: if isAdmin();
+
+      // ── SOUS-COLLECTION MESSAGES ──
+      match /messages/{messageId} {
+        // Fonction d'accès au ticket parent
+        function canAccessTicket() {
+          let ticket = get(/databases/$(database)/documents/tickets/$(ticketId)).data;
+          return isAdmin() ||
+            (isClient() && ticket.employeeId == request.auth.uid) ||
+            (isApprovedTechnician() && ticket.technicianId == request.auth.uid);
+        }
+
+        // Lecture : Client du ticket, Technicien assigné, ou Admin
+        allow read: if canAccessTicket();
+
+        // Création : expéditeur authentifié appartenant au ticket
+        allow create: if canAccessTicket() &&
+          request.resource.data.senderId == request.auth.uid &&
+          request.resource.data.content is string &&
+          request.resource.data.content.size() > 0;
+
+        // Les messages ne peuvent être ni modifiés ni supprimés
+        allow update, delete: if false;
+      }
+    }
+
+    // ===============================================================
+    // 3. COLLECTION FAQ_ARTICLES
+    // ===============================================================
+    match /faq_articles/{articleId} {
+      // Lecture : Tout utilisateur actif
+      allow read: if isActiveUser();
+
+      // Écriture : Administrateur uniquement
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ===============================================================
+    // 4. COLLECTION FEEDBACK
+    // ===============================================================
+    match /feedback/{ticketId} {
+      // Lecture : Le client auteur du feedback ou l'administrateur
+      allow read: if isAdmin() || (
+        isClient() && resource.data.employeeId == request.auth.uid
+      );
+
+      // Création : Une seule fois par le client du ticket, et seulement si le ticket est résolu
+      allow create: if isClient() &&
+        request.resource.data.employeeId == request.auth.uid &&
+        request.resource.data.ticketId == ticketId &&
+        get(/databases/$(database)/documents/tickets/$(ticketId)).data.employeeId == request.auth.uid &&
+        get(/databases/$(database)/documents/tickets/$(ticketId)).data.status == 'resolved' &&
+        request.resource.data.rating >= 1 &&
+        request.resource.data.rating <= 5;
+
+      // Un feedback ne peut plus être modifié ou supprimé
+      allow update, delete: if false;
+    }
+  }
+}
