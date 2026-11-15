@@ -98,14 +98,19 @@ service cloud.firestore {
     // ===============================================================
     match /tickets/{ticketId} {
       // Lecture :
-      // - Admin : tout
-      // - Client : uniquement ses propres tickets
-      // - Technicien approuvé : les tickets ouverts ou ceux qui lui sont assignés
+      // - Admin : tous les tickets
+      // - Client : uniquement ses propres tickets (employeeId == request.auth.uid)
+      // - Technicien approuvé : les tickets ouverts (status == 'open') ou ceux qui lui sont assignés (technicianId == request.auth.uid)
       allow read: if isAdmin() || (
-        isClient() && resource.data.get('employeeId', '') == request.auth.uid
+        isClient() && (
+          resource.data.get('employeeId', '') == request.auth.uid ||
+          resource.data.employeeId == request.auth.uid
+        )
       ) || (
         isApprovedTechnician() && (
+          resource.data.status == 'open' ||
           resource.data.get('status', '') == 'open' ||
+          resource.data.technicianId == request.auth.uid ||
           resource.data.get('technicianId', null) == request.auth.uid
         )
       );
@@ -211,9 +216,13 @@ service cloud.firestore {
     // 4. COLLECTION FEEDBACK
     // ===============================================================
     match /feedback/{ticketId} {
-      // Lecture : Le client auteur du feedback ou l'administrateur
+      // Lecture : Le client propriétaire du ticket associé, le technicien assigné à ce ticket, ou l'administrateur.
       allow read: if isAdmin() || (
-        isClient() && resource.data.get('employeeId', '') == request.auth.uid
+        isClient() &&
+        get(/databases/$(database)/documents/tickets/$(ticketId)).data.get('employeeId', '') == request.auth.uid
+      ) || (
+        isApprovedTechnician() &&
+        get(/databases/$(database)/documents/tickets/$(ticketId)).data.get('technicianId', '') == request.auth.uid
       );
 
       // Création : Une seule fois par le client du ticket, et seulement si le ticket est résolu

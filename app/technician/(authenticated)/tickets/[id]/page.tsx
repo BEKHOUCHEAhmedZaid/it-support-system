@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, notFound } from 'next/navigation'
 import Link from 'next/link'
 import type { Ticket, SystemInfo, Feedback } from '@/lib/types'
@@ -25,27 +25,37 @@ export default function TechnicianTicketDetailPage({
   const [ticket, setTicket] = useState<Ticket | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadTicketData = useCallback(() => {
+    if (!id) return
+    setLoading(true)
+    setError(null)
+
+    getTicketById(id)
+      .then(async (t) => {
+        setTicket(t)
+        if (t) {
+          // Chargement du feedback s'il existe (de manière sécurisée et isolée)
+          try {
+            const f = await getFeedback(id)
+            setFeedback(f)
+          } catch (feedbackErr) {
+            console.warn('[TechnicianTicketDetail] Note/feedback non accessible ou non existant:', feedbackErr)
+          }
+        }
+        setLoading(false)
+      })
+      .catch((err: any) => {
+        console.error('[TechnicianTicketDetail] Erreur chargement ticket:', err)
+        setError(err?.message || 'Impossible de charger les détails de l’intervention.')
+        setLoading(false)
+      })
+  }, [id])
 
   useEffect(() => {
-    if (!id) return
-    let isMounted = true
-    Promise.all([getTicketById(id), getFeedback(id)])
-      .then(([t, f]) => {
-        if (isMounted) {
-          setTicket(t)
-          setFeedback(f)
-          setLoading(false)
-        }
-      })
-      .catch((err) => {
-        console.error('Erreur chargement détail ticket technicien:', err)
-        if (isMounted) setLoading(false)
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [id])
+    loadTicketData()
+  }, [loadTicketData])
 
   if (loading) {
     return (
@@ -56,6 +66,23 @@ export default function TechnicianTicketDetailPage({
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
           </svg>
           <span className="text-sm font-medium text-gray-500">Chargement des détails de l&apos;intervention...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-6xl mx-auto py-12">
+        <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-900">
+          <h2 className="text-base font-bold">Erreur lors de l’accès au ticket</h2>
+          <p className="text-xs text-red-700 mt-1">{error}</p>
+          <button
+            onClick={loadTicketData}
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-bold hover:bg-red-700"
+          >
+            Réessayer
+          </button>
         </div>
       </div>
     )
@@ -114,7 +141,7 @@ export default function TechnicianTicketDetailPage({
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           </div>
           <p className="flex-1 text-sm font-bold text-gray-900 tracking-tight">Ce ticket est en attente d&apos;assignation. Prenez-le en charge pour commencer.</p>
-          <ReserveButton ticketId={id} />
+          <ReserveButton ticketId={id} onAssigned={loadTicketData} />
         </div>
       )}
 
@@ -161,7 +188,7 @@ export default function TechnicianTicketDetailPage({
         <div className="lg:col-span-4 space-y-6">
           {/* Resolve Ticket Form */}
           {isMyTicket && ticket.status === 'in_progress' && (
-            <ResolveTicketForm ticketId={id} />
+            <ResolveTicketForm ticketId={id} onResolved={loadTicketData} />
           )}
 
           {/* Already Resolved State */}

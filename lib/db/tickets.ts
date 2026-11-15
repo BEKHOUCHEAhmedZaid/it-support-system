@@ -76,7 +76,6 @@ export async function createTicket(data: {
   const docRef = await addDoc(colRef, {
     employeeId: data.employeeId,
     employeeName: data.employeeName,
-    // Pas d'employeeAvatar ni technicianAvatar dans le document ticket
     technicianId: null,
     technicianName: null,
     title: data.title,
@@ -107,23 +106,25 @@ export async function getClientTickets(
   options?: { status?: string; search?: string }
 ): Promise<Ticket[]> {
   const colRef = collection(db, TICKETS_COLLECTION)
+  
+  // Utilise un tri en mémoire pour être résilient si l'index composite n'est pas encore créé
   let q = query(
     colRef,
-    where('employeeId', '==', employeeId),
-    orderBy('createdAt', 'desc')
+    where('employeeId', '==', employeeId)
   )
-
-  if (options?.status) {
-    q = query(
-      colRef,
-      where('employeeId', '==', employeeId),
-      where('status', '==', options.status),
-      orderBy('createdAt', 'desc')
-    )
-  }
 
   const snap = await getDocs(q)
   let tickets = snap.docs.map((d) => mapDocToTicket(d.id, d.data()))
+
+  // Filtre de statut côté client si demandé
+  if (options?.status) {
+    tickets = tickets.filter((t) => t.status === options.status)
+  }
+
+  // Tri par date décroissante en mémoire
+  tickets.sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  )
 
   if (options?.search) {
     const s = options.search.toLowerCase()
@@ -141,47 +142,57 @@ export async function getTechnicianTickets(
 ): Promise<Ticket[]> {
   const colRef = collection(db, TICKETS_COLLECTION)
 
-  // 1. Requête pour les tickets assignés au technicien
-  let qAssigned = query(
-    colRef,
-    where('technicianId', '==', technicianId),
-    orderBy('createdAt', 'desc')
-  )
-
-  if (options?.status) {
-    qAssigned = query(
-      colRef,
-      where('technicianId', '==', technicianId),
-      where('status', '==', options.status),
-      orderBy('createdAt', 'desc')
-    )
-  }
-
-  // 2. Requête pour les tickets ouverts disponibles (si status non spécifié ou égal à 'open')
   let openTickets: Ticket[] = []
+  let assignedTickets: Ticket[] = []
+
+  // 1. Requête pour les tickets ouverts disponibles (si status non spécifié ou égal à 'open')
+  // On n'ajoute pas de orderBy('createdAt') directement dans la requête Firestore pour éviter d'exiger
+  // un index composite Firestore obligatoire (status + createdAt). Le tri se fait en mémoire ci-dessous.
   if (!options?.status || options.status === 'open') {
-    const qOpen = query(
-      colRef,
-      where('status', '==', 'open'),
-      orderBy('createdAt', 'desc')
-    )
-    const snapOpen = await getDocs(qOpen)
-    openTickets = snapOpen.docs.map(d => mapDocToTicket(d.id, d.data()))
+    try {
+      const qOpen = query(
+        colRef,
+        where('status', '==', 'open')
+      )
+      const snapOpen = await getDocs(qOpen)
+      openTickets = snapOpen.docs.map(d => mapDocToTicket(d.id, d.data()))
+    } catch (err: any) {
+      console.error('[getTechnicianTickets] Erreur récupération des tickets ouverts (status == open):', err)
+      throw err
+    }
   }
 
-  const snapAssigned = await getDocs(qAssigned)
-  const assignedTickets = snapAssigned.docs.map(d => mapDocToTicket(d.id, d.data()))
+  // 2. Requête pour les tickets assignés à ce technicien
+  // Même chose : requête pure sur technicianId sans orderBy composite dans Firestore.
+  try {
+    const qAssigned = query(
+      colRef,
+      where('technicianId', '==', technicianId)
+    )
+    const snapAssigned = await getDocs(qAssigned)
+    assignedTickets = snapAssigned.docs.map(d => mapDocToTicket(d.id, d.data()))
 
-  // 3. Fusion et tri sans doublons
+    // Si l'utilisateur filtre par statut spécifique (ex: 'in_progress', 'resolved'), on filtre en mémoire
+    if (options?.status && options.status !== 'open') {
+      assignedTickets = assignedTickets.filter(t => t.status === options.status)
+    }
+  } catch (err: any) {
+    console.error('[getTechnicianTickets] Erreur récupération des tickets assignés:', err)
+    throw err
+  }
+
+  // 3. Fusion et tri sans doublons (Map indexée par id)
   const ticketMap = new Map<string, Ticket>()
   for (const t of [...assignedTickets, ...openTickets]) {
     ticketMap.set(t.id, t)
   }
 
+  // 4. Tri par date de création décroissante (du plus récent au plus ancien)
   let tickets = Array.from(ticketMap.values()).sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   )
 
+  // 5. Filtre de recherche textuelle
   if (options?.search) {
     const s = options.search.toLowerCase()
     tickets = tickets.filter(
@@ -194,14 +205,19 @@ export async function getTechnicianTickets(
 
 export async function getAllTickets(options?: { status?: string; search?: string }): Promise<Ticket[]> {
   const colRef = collection(db, TICKETS_COLLECTION)
-  let q = query(colRef, orderBy('createdAt', 'desc'))
-
+  
+  let q = query(colRef)
   if (options?.status) {
-    q = query(colRef, where('status', '==', options.status), orderBy('createdAt', 'desc'))
+    q = query(colRef, where('status', '==', options.status))
   }
 
   const snap = await getDocs(q)
   let tickets = snap.docs.map((d) => mapDocToTicket(d.id, d.data()))
+
+  // Tri en mémoire par date de création décroissante
+  tickets.sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  )
 
   if (options?.search) {
     const s = options.search.toLowerCase()
@@ -248,15 +264,21 @@ export async function getTicketsForMessageCenter(
   const q = query(
     colRef,
     where(fieldToFilter, '==', userId),
-    where('hasMessages', '==', true),
-    orderBy('lastMessageAt', 'desc')
+    where('hasMessages', '==', true)
   )
 
   const snap = await getDocs(q)
-  return snap.docs.map((d) => mapDocToTicket(d.id, d.data()))
+  let tickets = snap.docs.map((d) => mapDocToTicket(d.id, d.data()))
+
+  // Tri en mémoire par date du dernier message
+  tickets.sort(
+    (a, b) => new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime()
+  )
+
+  return tickets
 }
 
-// Abonnement en temps réel aux changements de tickets (remplace RealTimeTickets)
+// Abonnement en temps réel aux changements de tickets
 export function subscribeToTickets(callback: () => void): () => void {
   const colRef = collection(db, TICKETS_COLLECTION)
   const unsubscribe = onSnapshot(colRef, () => {

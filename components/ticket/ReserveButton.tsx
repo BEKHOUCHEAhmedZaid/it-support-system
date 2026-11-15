@@ -4,27 +4,32 @@ import { assignTicket } from '@/lib/actions/tickets'
 
 interface Props {
   ticketId: string
+  onAssigned?: () => void
 }
 
-export function ReserveButton({ ticketId }: Props) {
+export function ReserveButton({ ticketId, onAssigned }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleReserve = async () => {
-    console.log("[ReserveButton] Clicked for ticket:", ticketId)
+    console.log('[ReserveButton] Prise en charge du ticket:', ticketId)
     setLoading(true)
     setError(null)
-    
+
     try {
       const result = await assignTicket(ticketId)
-      console.log("[ReserveButton] Action result:", result)
-      
+      console.log('[ReserveButton] Résultat assignation:', result)
+
       if (result?.error) {
         setError(result.error)
+      } else {
+        if (onAssigned) {
+          onAssigned()
+        }
       }
     } catch (e: any) {
-      console.error("[ReserveButton] Unexpected error:", e)
-      setError("Une erreur inattendue est survenue.")
+      console.error('[ReserveButton] Erreur inattendue:', e)
+      setError('Une erreur inattendue est survenue lors de la prise en charge.')
     } finally {
       setLoading(false)
     }
