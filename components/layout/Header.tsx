@@ -1,46 +1,41 @@
-import Image from 'next/image'
-import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+'use client'
+
+import { usePathname } from 'next/navigation'
+import { useAuth } from '@/context/AuthContext'
 import { NavbarClient } from './NavbarClient'
 
-export async function Header() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+export function Header() {
+  const { user, profile } = useAuth()
+  const pathname = usePathname()
 
-  let profile = null
-  if (user) {
-    const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-    profile = data
-  }
-
-  const { headers } = await import('next/headers')
-  const headerList = await headers()
-  const pathname = headerList.get('x-pathname') || ''
-
-  // Hide global header inside authenticated dashboards to avoid duplicate navigation
-  const isDashboard = pathname.startsWith('/admin') || 
-                      pathname.startsWith('/technician') || 
-                      pathname.startsWith('/client')
+  // Masque le header global dans les tableaux de bord pour éviter les doubles barres de navigation
+  const isDashboard =
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/technician') ||
+    pathname.startsWith('/client')
 
   if (isDashboard && user && profile) {
     return null
   }
 
-  // Define dashboard link based on role
+  // Détermine le lien du tableau de bord selon le rôle
   const getDashboardLink = () => {
     if (!profile) return '/client/tickets'
     switch (profile.role) {
-      case 'admin': return '/admin/tickets'
-      case 'technician': return '/technician/tickets'
-      default: return '/client/tickets'
+      case 'admin':
+        return '/admin/tickets'
+      case 'technician':
+        return '/technician/tickets'
+      default:
+        return '/client/tickets'
     }
   }
 
   return (
-    <NavbarClient 
-      user={user} 
-      profile={profile} 
-      dashboardLink={getDashboardLink()} 
+    <NavbarClient
+      user={user}
+      profile={profile}
+      dashboardLink={getDashboardLink()}
     />
   )
 }

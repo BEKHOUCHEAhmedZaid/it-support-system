@@ -3,16 +3,40 @@ import { useState } from 'react'
 import { resolveTicket } from '@/lib/actions/tickets'
 import { Textarea } from '@/components/ui/Textarea'
 
-export function ResolveTicketForm({ ticketId }: { ticketId: string }) {
+interface Props {
+  ticketId: string
+  onResolved?: () => void
+}
+
+export function ResolveTicketForm({ ticketId, onResolved }: Props) {
   const [resolution, setResolution] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError]           = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async () => {
-    if (!resolution.trim()) { setError('Veuillez décrire la solution appliquée.'); return }
+    if (!resolution.trim()) {
+      setError('Veuillez décrire la solution appliquée.')
+      return
+    }
     setSubmitting(true)
-    const result = await resolveTicket(ticketId, resolution.trim())
-    if (result?.error) { setError(result.error); setSubmitting(false) }
+    setError(null)
+
+    try {
+      const result = await resolveTicket(ticketId, resolution.trim())
+      if (result?.error) {
+        setError(result.error)
+        setSubmitting(false)
+      } else {
+        if (onResolved) {
+          onResolved()
+        }
+      }
+    } catch (err: any) {
+      console.error('[ResolveTicketForm] Erreur lors de la résolution:', err)
+      const code = err?.code ? `[${err.code}] ` : ''
+      setError(`${code}${err?.message || 'Erreur lors de la clôture du ticket.'}`)
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -31,16 +55,20 @@ export function ResolveTicketForm({ ticketId }: { ticketId: string }) {
         <Textarea
           label="Résumé de la résolution"
           value={resolution}
-          onChange={e => setResolution(e.target.value)}
+          onChange={(e) => setResolution(e.target.value)}
           rows={5}
           placeholder="Ex: Mise à jour du client VPN effectuée. La connexion est maintenant stable..."
           className="bg-white border-emerald-100 focus:border-emerald-300 focus:ring-emerald-50"
         />
-        
-        {error && <p className="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-lg border border-red-100">{error}</p>}
 
-        <button 
-          onClick={handleSubmit} 
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-600 shadow-sm animate-in fade-in duration-200">
+            ⚠️ Échec de la résolution : {error}
+          </div>
+        )}
+
+        <button
+          onClick={handleSubmit}
           disabled={submitting}
           className="w-full inline-flex items-center justify-center gap-3 rounded-2xl bg-emerald-500 px-8 py-4 text-sm font-black text-white shadow-xl shadow-emerald-100 hover:bg-emerald-600 hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-50"
         >

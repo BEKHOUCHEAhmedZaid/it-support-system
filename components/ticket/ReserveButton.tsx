@@ -4,27 +4,33 @@ import { assignTicket } from '@/lib/actions/tickets'
 
 interface Props {
   ticketId: string
+  onAssigned?: () => void
 }
 
-export function ReserveButton({ ticketId }: Props) {
+export function ReserveButton({ ticketId, onAssigned }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleReserve = async () => {
-    console.log("[ReserveButton] Clicked for ticket:", ticketId)
+    console.log('[ReserveButton] Prise en charge du ticket:', ticketId)
     setLoading(true)
     setError(null)
-    
+
     try {
       const result = await assignTicket(ticketId)
-      console.log("[ReserveButton] Action result:", result)
-      
+      console.log('[ReserveButton] Résultat assignation:', result)
+
       if (result?.error) {
         setError(result.error)
+      } else {
+        if (onAssigned) {
+          onAssigned()
+        }
       }
     } catch (e: any) {
-      console.error("[ReserveButton] Unexpected error:", e)
-      setError("Une erreur inattendue est survenue.")
+      console.error('[ReserveButton] Erreur inattendue:', e)
+      const code = e?.code ? `[${e.code}] ` : ''
+      setError(`${code}${e?.message || 'Une erreur inattendue est survenue lors de la prise en charge.'}`)
     } finally {
       setLoading(false)
     }
@@ -46,7 +52,12 @@ export function ReserveButton({ ticketId }: Props) {
           </>
         )}
       </button>
-      {error && <p className="text-[10px] font-bold text-red-500 mt-1">{error}</p>}
+
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-600 shadow-sm animate-in fade-in duration-200">
+          ⚠️ Échec de la réservation : {error}
+        </div>
+      )}
     </div>
   )
 }

@@ -1,8 +1,9 @@
 'use client'
+
 import { useEffect, useRef, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import type { Message, Profile } from '@/lib/types'
-import { sendMessage } from '@/lib/actions/tickets'
+import { subscribeToMessages, sendMessage as dbSendMessage } from '@/lib/db/messages'
+import { useAuth } from '@/context/AuthContext'
 
 interface Props {
   ticketId: string
@@ -11,45 +12,45 @@ interface Props {
 }
 
 export function ChatSection({ ticketId, currentUserId, initialMessages }: Props) {
-  const [messages, setMessages] = useState(initialMessages)
-  const [content, setContent]  = useState('')
-  const [sending, setSending]  = useState(false)
+  const [messages, setMessages] = useState<(Message & { sender?: Profile | null })[]>(initialMessages)
+  const [content, setContent] = useState('')
+  const [sending, setSending] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const { profile } = useAuth()
 
-  // Scroll to bottom on new messages
+  // Défilement automatique vers le bas à chaque nouveau message
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Supabase Realtime subscription
+  // Écoute temps réel via Firestore onSnapshot
   useEffect(() => {
-    const supabase = createClient()
-    const channel  = supabase
-      .channel(`ticket-messages-${ticketId}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `ticket_id=eq.${ticketId}` },
-        async (payload) => {
-          // Fetch the sender profile for the new message
-          const { data: sender } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', payload.new.sender_id)
-            .single()
-          setMessages(prev => [...prev, { ...(payload.new as Message), sender: sender ?? null }])
-        }
-      )
-      .subscribe()
+    const unsubscribe = subscribeToMessages(ticketId, (updatedMessages) => {
+      setMessages(updatedMessages)
+    })
 
-    return () => { supabase.removeChannel(channel) }
+    return () => {
+      unsubscribe()
+    }
   }, [ticketId])
 
   const handleSend = async () => {
-    if (!content.trim()) return
+    if (!content.trim() || !profile) return
     setSending(true)
-    await sendMessage(ticketId, content.trim())
-    setContent('')
-    setSending(false)
+    try {
+      await dbSendMessage(ticketId, {
+        senderId: currentUserId,
+        senderName: profile.full_name || 'Utilisateur',
+        senderRole: profile.role,
+        // senderAvatar intentionnellement absent : affichage par initiales uniquement
+        content: content.trim(),
+      })
+      setContent('')
+    } catch (err) {
+      console.error('Erreur lors de l\'envoi du message:', err)
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -72,21 +73,39 @@ export function ChatSection({ ticketId, currentUserId, initialMessages }: Props)
           </div>
         )}
         
-        {messages.map((msg, idx) => {
+        {messages.map((msg) => {
           const isMe = msg.sender_id === currentUserId
           const isTechnician = msg.sender?.role === 'technician'
-          
+          const senderName = msg.sender?.full_name || 'Utilisateur'
+          // Initiales : max 2 caractères (ex: "JD" pour "Jean Dupont")
+          const initials = senderName
+            .split(' ')
+            .map((w) => w[0] ?? '')
+            .join('')
+            .substring(0, 2)
+            .toUpperCase()
+
           return (
-            <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+            <div key={msg.id} className={`flex items-end gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+              {/* Initiales à la place de l'avatar */}
+              <div className={`flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center text-[10px] font-black select-none
+                ${isMe ? 'bg-blue-100 text-primary' : isTechnician ? 'bg-sidebar text-white' : 'bg-gray-200 text-gray-600'}`}>
+                {initials}
+              </div>
               <div
-                className={`max-w-[85%] rounded-2xl px-5 py-3 text-sm leading-relaxed relative
-                  ${isMe 
-                    ? 'bg-blue-50 text-gray-800 rounded-tr-sm' 
-                    : isTechnician 
-                      ? 'bg-sidebar text-white rounded-tl-sm' 
+                className={`max-w-[80%] rounded-2xl px-5 py-3 text-sm leading-relaxed
+                  ${isMe
+                    ? 'bg-blue-50 text-gray-800 rounded-tr-sm'
+                    : isTechnician
+                      ? 'bg-sidebar text-white rounded-tl-sm'
                       : 'bg-gray-100 text-gray-800 rounded-tl-sm'
                   }`}
               >
+                {!isMe && (
+                  <p className={`text-[10px] font-black mb-1 ${isTechnician ? 'text-blue-200' : 'text-gray-400'}`}>
+                    {senderName}
+                  </p>
+                )}
                 {msg.content}
                 <div className={`text-[10px] mt-1.5 opacity-40 text-right ${isTechnician && !isMe ? 'text-blue-100' : 'text-gray-500'}`}>
                   {new Date(msg.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
@@ -98,19 +117,9 @@ export function ChatSection({ ticketId, currentUserId, initialMessages }: Props)
         <div ref={bottomRef} />
       </div>
 
-      {/* Typing indicator (simulated for effect) */}
-      <div className="flex items-center gap-2 ml-1">
-        <div className="flex items-center gap-1 bg-gray-50 border border-gray-100 rounded-full px-3 py-1.5">
-          <span className="text-[10px] text-gray-400 font-medium italic">L&apos;agent est en train d&apos;écrire...</span>
-        </div>
-      </div>
-
       {/* Input */}
       <div className="relative group">
         <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-2xl p-2 pl-4 focus-within:border-primary focus-within:ring-4 focus-within:ring-blue-50 transition-all">
-          <button className="text-gray-400 hover:text-gray-600 transition-colors">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
-          </button>
           <input
             type="text"
             value={content}

@@ -1,23 +1,44 @@
-import { createClient }    from '@/lib/supabase/server'
-import { FaqList }         from '@/components/faq/FaqList'
-import { FaqCreateForm }   from '@/components/faq/FaqCreateForm'
+'use client'
+
+import { Suspense, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { FaqList } from '@/components/faq/FaqList'
+import { FaqCreateForm } from '@/components/faq/FaqCreateForm'
 import Link from 'next/link'
+import type { FaqArticle } from '@/lib/types'
+import { getFaqArticles } from '@/lib/db/faq'
 
-export default async function TechnicianFaqPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ prefill?: string }>
-}) {
-  const supabase = await createClient()
-  const { data: articles } = await supabase
-    .from('faq_articles')
-    .select('*')
-    .order('created_at', { ascending: false })
+function TechnicianFaqContent() {
+  const searchParams = useSearchParams()
+  const prefillParam = searchParams.get('prefill')
 
-  const params = await searchParams
+  const [articles, setArticles] = useState<FaqArticle[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let isMounted = true
+    getFaqArticles(true)
+      .then((data) => {
+        if (isMounted) {
+          setArticles(data)
+          setLoading(false)
+        }
+      })
+      .catch((err) => {
+        console.error('Erreur chargement articles FAQ technicien:', err)
+        if (isMounted) setLoading(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
   let prefill: { title?: string; content?: string; category?: string } = {}
-  if (params.prefill) {
-    try { prefill = JSON.parse(decodeURIComponent(params.prefill)) } catch {}
+  if (prefillParam) {
+    try {
+      prefill = JSON.parse(decodeURIComponent(prefillParam))
+    } catch {}
   }
 
   return (
@@ -50,11 +71,41 @@ export default async function TechnicianFaqPage({
         <div className="lg:col-span-7 space-y-6">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-lg font-bold text-gray-900">Articles existants</h2>
-            <span className="px-3 py-1 rounded-full bg-gray-100 text-[10px] font-bold text-gray-500 uppercase tracking-wider">{articles?.length ?? 0} Articles</span>
+            <span className="px-3 py-1 rounded-full bg-gray-100 text-[10px] font-bold text-gray-500 uppercase tracking-wider">{articles.length} Articles</span>
           </div>
-          <FaqList articles={articles ?? []} />
+          {loading ? (
+            <div className="py-20 text-center">
+              <div className="flex items-center justify-center gap-3">
+                <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                </svg>
+                <span className="text-sm font-medium text-gray-500">Chargement des articles...</span>
+              </div>
+            </div>
+          ) : (
+            <FaqList articles={articles} />
+          )}
         </div>
       </div>
     </div>
+  )
+}
+
+export default function TechnicianFaqPage() {
+  return (
+    <Suspense fallback={
+      <div className="py-20 text-center">
+        <div className="flex items-center justify-center gap-3">
+          <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+          </svg>
+          <span className="text-sm font-medium text-gray-500">Chargement...</span>
+        </div>
+      </div>
+    }>
+      <TechnicianFaqContent />
+    </Suspense>
   )
 }
