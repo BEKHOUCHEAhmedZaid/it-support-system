@@ -33,7 +33,8 @@ export function ResolveTicketForm({ ticketId, onResolved }: Props) {
       }
     } catch (err: any) {
       console.error('[ResolveTicketForm] Erreur lors de la résolution:', err)
-      setError(err?.message || 'Erreur lors de la clôture du ticket.')
+      const code = err?.code ? `[${err.code}] ` : ''
+      setError(`${code}${err?.message || 'Erreur lors de la clôture du ticket.'}`)
       setSubmitting(false)
     }
   }
@@ -60,7 +61,11 @@ export function ResolveTicketForm({ ticketId, onResolved }: Props) {
           className="bg-white border-emerald-100 focus:border-emerald-300 focus:ring-emerald-50"
         />
 
-        {error && <p className="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-lg border border-red-100">{error}</p>}
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-600 shadow-sm animate-in fade-in duration-200">
+            ⚠️ Échec de la résolution : {error}
+          </div>
+        )}
 
         <button
           onClick={handleSubmit}

@@ -176,7 +176,7 @@ function TechnicianTicketsContent() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-50/50 border-b border-gray-100">
-                  {['Détails', 'Demandeur', 'Priorité', 'Statut', 'Assignation', 'Date'].map((h) => (
+                  {['Détails', 'Demandeur', 'Priorité', 'Statut', 'Assignation', 'Date', 'Action'].map((h) => (
                     <th key={h} className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">
                       {h}
                     </th>
@@ -186,7 +186,7 @@ function TechnicianTicketsContent() {
               <tbody className="divide-y divide-gray-50">
                 {tickets.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-20 text-center text-gray-400 font-medium">
+                    <td colSpan={7} className="px-6 py-20 text-center text-gray-400 font-medium">
                       {error
                         ? 'Le chargement des interventions a échoué (voir le message d’erreur ci-dessus).'
                         : 'Aucun ticket à traiter pour le moment (aucun ticket ouvert ni assigné).'}
@@ -236,6 +236,17 @@ function TechnicianTicketsContent() {
                         </td>
                         <td className="px-6 py-5 text-xs text-gray-500 font-medium">
                           {new Date(ticket.created_at).toLocaleDateString('fr-FR')}
+                        </td>
+                        <td className="px-6 py-5">
+                          <Link
+                            href={`/technician/tickets/${ticket.id}`}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-dark transition-all shadow-sm"
+                          >
+                            Ouvrir
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </Link>
                         </td>
                       </tr>
                     )

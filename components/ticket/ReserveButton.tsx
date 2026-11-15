@@ -29,7 +29,8 @@ export function ReserveButton({ ticketId, onAssigned }: Props) {
       }
     } catch (e: any) {
       console.error('[ReserveButton] Erreur inattendue:', e)
-      setError('Une erreur inattendue est survenue lors de la prise en charge.')
+      const code = e?.code ? `[${e.code}] ` : ''
+      setError(`${code}${e?.message || 'Une erreur inattendue est survenue lors de la prise en charge.'}`)
     } finally {
       setLoading(false)
     }
@@ -51,7 +52,12 @@ export function ReserveButton({ ticketId, onAssigned }: Props) {
           </>
         )}
       </button>
-      {error && <p className="text-[10px] font-bold text-red-500 mt-1">{error}</p>}
+
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-600 shadow-sm animate-in fade-in duration-200">
+          ⚠️ Échec de la réservation : {error}
+        </div>
+      )}
     </div>
   )
 }

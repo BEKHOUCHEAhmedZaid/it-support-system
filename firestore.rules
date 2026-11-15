@@ -100,7 +100,9 @@ service cloud.firestore {
       // Lecture :
       // - Admin : tous les tickets
       // - Client : uniquement ses propres tickets (employeeId == request.auth.uid)
-      // - Technicien approuvé : les tickets ouverts (status == 'open') ou ceux qui lui sont assignés (technicianId == request.auth.uid)
+      // - Technicien approuvé :
+      //     * les tickets ouverts (status == 'open')
+      //     * les tickets qui lui sont assignés (technicianId == request.auth.uid)
       allow read: if isAdmin() || (
         isClient() && (
           resource.data.get('employeeId', '') == request.auth.uid ||
@@ -134,14 +136,19 @@ service cloud.firestore {
       // Modification :
       // - Admin : peut tout modifier
       // - Technicien approuvé :
-      //     * Prise en charge d'un ticket : modifie UNIQUEMENT technicianId, technicianName, technicianAvatar, status ('in_progress') et updatedAt
-      //     * Résolution d'un ticket : modifie UNIQUEMENT status ('resolved'), resolution, resolvedAt et updatedAt
+      //     * 1. Prise en charge d'un ticket ouvert :
+      //          Le ticket doit être ouvert (status == 'open') et non assigné.
+      //          Le technicien s'assigne (technicianId == auth.uid) et passe le statut à 'in_progress'.
+      //     * 2. Résolution de son ticket assigné :
+      //          Le ticket doit être assigné à ce technicien (technicianId == auth.uid) et être 'in_progress'.
+      //          Le statut passe à 'resolved' avec une résolution non vide.
       // - Client OU Technicien assigné :
-      //     * Envoi d'un message : met à jour UNIQUEMENT hasMessages et lastMessageAt
+      //     * 3. Envoi d'un message : met à jour uniquement hasMessages et lastMessageAt
       allow update: if isAdmin() || (
         // 1. Technicien s'assigne un ticket ouvert
         isApprovedTechnician() &&
-        (resource.data.get('technicianId', null) == null || resource.data.get('status', '') == 'open') &&
+        (resource.data.status == 'open' || resource.data.get('status', '') == 'open') &&
+        (resource.data.technicianId == null || resource.data.get('technicianId', null) == null) &&
         request.resource.data.get('technicianId', null) == request.auth.uid &&
         request.resource.data.get('status', '') == 'in_progress' &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -150,7 +157,8 @@ service cloud.firestore {
       ) || (
         // 2. Technicien résout son ticket assigné
         isApprovedTechnician() &&
-        resource.data.get('technicianId', null) == request.auth.uid &&
+        (resource.data.technicianId == request.auth.uid || resource.data.get('technicianId', null) == request.auth.uid) &&
+        (resource.data.status == 'in_progress' || resource.data.get('status', '') == 'in_progress') &&
         request.resource.data.get('status', '') == 'resolved' &&
         request.resource.data.get('resolution', '') is string &&
         request.resource.data.get('resolution', '').size() > 0 &&
@@ -160,8 +168,8 @@ service cloud.firestore {
       ) || (
         // 3. Client ou Technicien assigné mettant à jour les métadonnées de messages
         isActiveUser() && (
-          (isClient() && resource.data.get('employeeId', '') == request.auth.uid) ||
-          (isApprovedTechnician() && resource.data.get('technicianId', null) == request.auth.uid)
+          (isClient() && (resource.data.employeeId == request.auth.uid || resource.data.get('employeeId', '') == request.auth.uid)) ||
+          (isApprovedTechnician() && (resource.data.technicianId == request.auth.uid || resource.data.get('technicianId', null) == request.auth.uid))
         ) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'hasMessages', 'lastMessageAt'

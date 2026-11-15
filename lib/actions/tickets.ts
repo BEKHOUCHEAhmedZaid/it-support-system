@@ -14,7 +14,7 @@ import type { TicketCategory, TicketPriority } from '@/lib/types'
 // ── CREATE TICKET ──────────────────────────────────
 export async function createTicket(formData: FormData) {
   const user = auth.currentUser
-  if (!user) return { error: 'Non authentifié' }
+  if (!user) return { error: 'Non authentifié. Veuillez vous reconnecter.' }
 
   const title = (formData.get('title') as string)?.trim()
   const description = (formData.get('description') as string)?.trim()
@@ -30,12 +30,11 @@ export async function createTicket(formData: FormData) {
   try {
     const profile = await getUserProfile(user.uid)
     const employeeName = profile?.full_name || user.displayName || 'Client'
-    const employeeAvatar = profile?.avatar_url || user.photoURL || null
+    // employeeAvatar n'est plus stocké dans le ticket
 
     const ticketId = await dbCreateTicket({
       employeeId: user.uid,
       employeeName,
-      // employeeAvatar n'est plus stocké dans le ticket
       title,
       description,
       category,
@@ -46,44 +45,57 @@ export async function createTicket(formData: FormData) {
 
     return { id: ticketId }
   } catch (error: any) {
-    console.error('Erreur création ticket:', error)
-    return { error: error.message || 'Erreur lors de la création du ticket.' }
+    console.error('[createTicket] Erreur création ticket:', error)
+    const code = error?.code ? `[${error.code}] ` : ''
+    return { error: `${code}${error?.message || 'Erreur lors de la création du ticket.'}` }
   }
 }
 
 // ── ASSIGN TICKET (TECHNICIAN CLAIM) ───────────────
 export async function assignTicket(ticketId: string) {
   const user = auth.currentUser
-  if (!user) return { error: 'Non authentifié' }
+  if (!user) return { error: 'Non authentifié. Veuillez vous reconnecter.' }
 
   try {
     const profile = await getUserProfile(user.uid)
     const technicianName = profile?.full_name || user.displayName || 'Technicien'
-    // technicianAvatar non passé : non stocké dans le ticket
 
     await dbAssignTicket(ticketId, user.uid, technicianName)
     return { success: true }
   } catch (error: any) {
-    console.error('Erreur réservation ticket:', error)
-    return { error: error.message || 'Erreur lors de la réservation du ticket.' }
+    console.error('[assignTicket] Erreur réservation ticket:', error)
+    const code = error?.code ? `[${error.code}] ` : ''
+    let msg = error?.message || 'Erreur lors de la réservation du ticket.'
+    if (error?.code === 'permission-denied') {
+      msg = 'Accès refusé [permission-denied] : vous devez être un technicien approuvé ("status: approved") et le ticket doit être ouvert ("open").'
+    }
+    return { error: `${code}${msg}` }
   }
 }
 
 // ── RESOLVE TICKET ─────────────────────────────────
 export async function resolveTicket(ticketId: string, resolution: string) {
+  const user = auth.currentUser
+  if (!user) return { error: 'Non authentifié. Veuillez vous reconnecter.' }
+
   try {
     await dbResolveTicket(ticketId, resolution)
     return { success: true }
   } catch (error: any) {
-    console.error('Erreur résolution ticket:', error)
-    return { error: error.message || 'Erreur lors de la résolution du ticket.' }
+    console.error('[resolveTicket] Erreur résolution ticket:', error)
+    const code = error?.code ? `[${error.code}] ` : ''
+    let msg = error?.message || 'Erreur lors de la résolution du ticket.'
+    if (error?.code === 'permission-denied') {
+      msg = 'Accès refusé [permission-denied] : seul le technicien assigné peut résoudre son ticket.'
+    }
+    return { error: `${code}${msg}` }
   }
 }
 
 // ── SEND MESSAGE ───────────────────────────────────
 export async function sendMessage(ticketId: string, content: string) {
   const user = auth.currentUser
-  if (!user) return { error: 'Non authentifié' }
+  if (!user) return { error: 'Non authentifié. Veuillez vous reconnecter.' }
 
   try {
     const profile = await getUserProfile(user.uid)
@@ -91,20 +103,20 @@ export async function sendMessage(ticketId: string, content: string) {
       senderId: user.uid,
       senderName: profile?.full_name || 'Utilisateur',
       senderRole: profile?.role || 'client',
-      // senderAvatar non stocké dans les messages : affichage par initiales dans le chat
       content,
     })
     return { success: true }
   } catch (error: any) {
-    console.error('Erreur envoi message:', error)
-    return { error: error.message || 'Erreur lors de l\'envoi du message.' }
+    console.error('[sendMessage] Erreur envoi message:', error)
+    const code = error?.code ? `[${error.code}] ` : ''
+    return { error: `${code}${error?.message || 'Erreur lors de l’envoi du message.'}` }
   }
 }
 
 // ── SUBMIT FEEDBACK ────────────────────────────────
 export async function submitFeedback(ticketId: string, rating: number, comment: string) {
   const user = auth.currentUser
-  if (!user) return { error: 'Non authentifié' }
+  if (!user) return { error: 'Non authentifié. Veuillez vous reconnecter.' }
 
   try {
     await dbSubmitFeedback({
@@ -115,7 +127,8 @@ export async function submitFeedback(ticketId: string, rating: number, comment: 
     })
     return { success: true }
   } catch (error: any) {
-    console.error('Erreur soumission feedback:', error)
-    return { error: error.message || 'Erreur lors de la soumission du feedback.' }
+    console.error('[submitFeedback] Erreur soumission feedback:', error)
+    const code = error?.code ? `[${error.code}] ` : ''
+    return { error: `${code}${error?.message || 'Erreur lors de la soumission du feedback.'}` }
   }
 }

@@ -95,10 +95,15 @@ export async function createTicket(data: {
 }
 
 export async function getTicketById(ticketId: string): Promise<Ticket | null> {
-  const docRef = doc(db, TICKETS_COLLECTION, ticketId)
-  const snap = await getDoc(docRef)
-  if (!snap.exists()) return null
-  return mapDocToTicket(snap.id, snap.data())
+  try {
+    const docRef = doc(db, TICKETS_COLLECTION, ticketId)
+    const snap = await getDoc(docRef)
+    if (!snap.exists()) return null
+    return mapDocToTicket(snap.id, snap.data())
+  } catch (err: any) {
+    console.error(`[getTicketById] Erreur lors de la lecture du ticket ${ticketId}:`, err)
+    throw err
+  }
 }
 
 export async function getClientTickets(
